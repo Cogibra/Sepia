@@ -1,8 +1,8 @@
 import unittest
 
-from testing.sepia.graph.test_functional import TestGraphConv
-from testing.sepia.seq.test_functional import TestNICE
+from sepia.test.graph.test_functional import TestGraphConv
+from sepia.test.seq.test_functional import TestNICE
 
 if __name__ == "__main__":
     
-    unittest.main(verbosity=1)
+    unittest.main(verbosity=2)
