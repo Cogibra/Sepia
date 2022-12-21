@@ -7,9 +7,29 @@ import numpy.random as npr
 
 from sepia.seq.functional import \
         NICEParametersWB, \
+        NICEParametersW, \
+        SelfAttentionWB, \
+        SelfAttentionW, \
+        self_attention,\
         bijective_forward, \
         bijective_reverse
 
+
+
+class TestSelfAttention(unittest.TestCase):
+    
+    def setUp(self):
+
+        weights = npr.randn(12, 36)
+        self.x = npr.randn(16,32,12)
+
+        self.parameters = SelfAttentionW(weights = weights)
+
+    def test_self_attention(self):
+
+        encoded = self_attention(self.x, self.parameters)
+
+        self.assertEqual(self.x.shape, encoded.shape)
 
 class TestNICE(unittest.TestCase):
 

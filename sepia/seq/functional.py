@@ -1,3 +1,4 @@
+import jax
 from jax import numpy as jnp
 from jax import grad
 
@@ -12,18 +13,22 @@ from sepia.seq.data import \
 
 NICEParametersWB = namedtuple("NICEParametersWB", field_names=("weights", "biases"))
 NICEParametersW = namedtuple("NICEParametersW", field_names=("weights"))
-SelfAttentionWB = namedtuple("EncoderParamsWB", field_names=("weights", "biases"))
-SelfAttentionW = namedtuple("EncoderParamsW", field_names=("weights"))
+SelfAttentionWB = namedtuple("SelfAttentionWB", field_names=("weights", "biases"))
+SelfAttentionW = namedtuple("SelfAttentionW", field_names=("weights"))
 
+dot = lambda a, b: jnp.dot(a, b.T)
 
-def dot_product_attention(x: jnp.array, parameters: SelfAttentionW) -> jnp.array:
+seq_dot = jax.vmap(dot)
+batch_seq_dot = jax.vmap(seq_dot)
+
+def self_attention(x: jnp.array, parameters: SelfAttentionW) -> jnp.array:
     """
     This function is a dot product self-attention layer
 
     args: 
     x is the input vector (jax array) with dimensions n by s by d, where n is the
     batch size, s is the sequence length, and d is the vector dimension
-    parameters is a SelfAttentionWB named tuple which includes weights and biases. 
+    parameters is a SelfAttentionW named tuple which includes weights. 
     
 
     returns:
@@ -32,16 +37,18 @@ def dot_product_attention(x: jnp.array, parameters: SelfAttentionW) -> jnp.array
 
     kqv_split = x.shape[-1]
     
-    key_query_value = parameters.biases + jnp.relu(jnp.matmul(x, parameters.weights))
+    key_query_value = jax.nn.relu(jnp.matmul(x, parameters.weights))
 
     key = key_query_value[:,:,0:kqv_split]
     query = key_query_value[:,:,kqv_split:2*kqv_split]
     value = key_query_value[:,:,2*kqv_split:3*kqv_split]
 
-    #raw_attention = jnp.matmul(key):
+    raw_attention = batch_seq_dot(key, query)[:,:,None]
 
-    output = 1
+    attention = jax.nn.softmax(raw_attention, axis=0)
 
+    output = attention * value
+    
     return output
 
 
