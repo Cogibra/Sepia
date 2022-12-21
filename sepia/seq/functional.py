@@ -15,11 +15,34 @@ NICEParametersWB = namedtuple("NICEParametersWB", field_names=("weights", "biase
 NICEParametersW = namedtuple("NICEParametersW", field_names=("weights"))
 SelfAttentionWB = namedtuple("SelfAttentionWB", field_names=("weights", "biases"))
 SelfAttentionW = namedtuple("SelfAttentionW", field_names=("weights"))
+EncoderParams = namedtuple("EncoderParams", \
+        field_names=("attention_weights", "mlp_params"))
+MLPParams = namedtuple("MLPParams", \
+        field_names=("mlp_weights", "mlp_biases", "activation"))
 
 dot = lambda a, b: jnp.dot(a, b.T)
-
 seq_dot = jax.vmap(dot)
 batch_seq_dot = jax.vmap(seq_dot)
+
+def mlp(x: jnp.array, parameters: MLPParams) -> jnp.array:
+
+    for ii in range(len(parameters.mlp_weights)-1):
+        
+        x = jnp.matmul(x, parameters.mlp_weights[ii]) 
+        x = parameters.activation(x + parameters.mlp_biases[ii])
+
+    x = jnp.matmul(x, parameters.mlp_weights[-1]) 
+    x = x + parameters.mlp_biases[-1]
+
+    return x
+
+def encoder(x: jnp.array, parameters: EncoderParams) -> jnp.array:
+
+    attention = self_attention(x, parameters.attention_weights)
+
+    output = mlp(attention, parameters.mlp_params)
+        
+    return output
 
 def self_attention(x: jnp.array, parameters: SelfAttentionW) -> jnp.array:
     """

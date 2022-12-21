@@ -1,5 +1,6 @@
 import unittest
 
+import jax
 from jax import numpy as jnp
 from jax import grad
 
@@ -10,11 +11,12 @@ from sepia.seq.functional import \
         NICEParametersW, \
         SelfAttentionWB, \
         SelfAttentionW, \
-        self_attention,\
+        EncoderParams, \
+        MLPParams, \
+        self_attention, \
+        encoder, \
         bijective_forward, \
         bijective_reverse
-
-
 
 class TestSelfAttention(unittest.TestCase):
     
@@ -27,7 +29,35 @@ class TestSelfAttention(unittest.TestCase):
 
     def test_self_attention(self):
 
-        encoded = self_attention(self.x, self.parameters)
+        attention = self_attention(self.x, self.parameters)
+
+        self.assertEqual(self.x.shape, attention.shape)
+
+class TestEncoder(unittest.TestCase):
+    
+    def setUp(self):
+
+        weights = npr.randn(12, 36)
+        self.x = npr.randn(16,32,12)
+
+        attention_weights = SelfAttentionW(weights = weights)
+
+        mlp_weights = [npr.randn(12, 32), npr.randn(32,8), npr.randn(8,12)]
+        mlp_biases = [npr.randn(32,), npr.randn(8,), npr.randn(12,)]
+        mlp_activation = jax.nn.relu
+
+        mlp_params = MLPParams(mlp_weights=mlp_weights,\
+                mlp_biases=mlp_biases,\
+                activation=mlp_activation)
+
+        self.parameters = EncoderParams( \
+                attention_weights = attention_weights, \
+                mlp_params = mlp_params)
+            
+
+    def test_self_attention(self):
+
+        encoded = encoder(self.x, self.parameters)
 
         self.assertEqual(self.x.shape, encoded.shape)
 
