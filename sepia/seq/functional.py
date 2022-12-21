@@ -12,6 +12,38 @@ from sepia.seq.data import \
 
 NICEParametersWB = namedtuple("NICEParametersWB", field_names=("weights", "biases"))
 NICEParametersW = namedtuple("NICEParametersW", field_names=("weights"))
+SelfAttentionWB = namedtuple("EncoderParamsWB", field_names=("weights", "biases"))
+SelfAttentionW = namedtuple("EncoderParamsW", field_names=("weights"))
+
+
+def dot_product_attention(x: jnp.array, parameters: SelfAttentionW) -> jnp.array:
+    """
+    This function is a dot product self-attention layer
+
+    args: 
+    x is the input vector (jax array) with dimensions n by s by d, where n is the
+    batch size, s is the sequence length, and d is the vector dimension
+    parameters is a SelfAttentionWB named tuple which includes weights and biases. 
+    
+
+    returns:
+    output: a jax numpy array
+    """
+
+    kqv_split = x.shape[-1]
+    
+    key_query_value = parameters.biases + jnp.relu(jnp.matmul(x, parameters.weights))
+
+    key = key_query_value[:,:,0:kqv_split]
+    query = key_query_value[:,:,kqv_split:2*kqv_split]
+    value = key_query_value[:,:,2*kqv_split:3*kqv_split]
+
+    #raw_attention = jnp.matmul(key):
+
+    output = 1
+
+    return output
+
 
 def bijective_forward(sequence_vectors: jnp.array, \
         parameters: NICEParametersWB, pad_to: int=1024) -> jnp.array:
