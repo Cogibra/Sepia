@@ -28,8 +28,6 @@ dot = lambda a, b: jnp.dot(a, b.T)
 seq_dot = jax.vmap(dot)
 batch_seq_dot = jax.vmap(seq_dot)
 
-
-
 def mlp(x: jnp.array, parameters: MLPParams) -> jnp.array:
 
     for ii in range(len(parameters.mlp_weights)-1):
@@ -185,7 +183,6 @@ def bijective_reverse(sequence_features: jnp.array, \
     args: 
     sequence_vector represents a biological sequence (DNA, RNA, or amino acid) after being translated to a jax numpy array 
     parameters contains 3 matrices representing 3 matmuls/neural layers and optional biases for each
-    pad_to is an integer specifying the final length of the sequence. If pad_to is less than len(sequence), the sequence will be truncated
 
     usage:
 
@@ -193,7 +190,7 @@ def bijective_reverse(sequence_features: jnp.array, \
     # forward pass  
     ha_tag = "YPYDVPDYA"
     sequence_vectors = sequence_to_vectors(ha_tag, aa_sequence_dict)
-    tokens = bijective_forward(sequence_vectors, parameters, pad_to=2048)
+    tokens = bijective_forward(sequence_vectors, parameters)
 
     # reverse pass 
     detokens = bijective_reverse(tokens, parameters)
