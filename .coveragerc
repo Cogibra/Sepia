@@ -1,0 +1,6 @@
+[run]
+omit =
+    sepia/test/*
+[report]
+omit =
+    sepia/test/*

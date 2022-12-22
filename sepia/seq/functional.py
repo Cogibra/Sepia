@@ -1,3 +1,4 @@
+import jax
 from jax import numpy as jnp
 from jax import grad
 
@@ -12,6 +13,89 @@ from sepia.seq.data import \
 
 NICEParametersWB = namedtuple("NICEParametersWB", field_names=("weights", "biases"))
 NICEParametersW = namedtuple("NICEParametersW", field_names=("weights"))
+SelfAttentionWB = namedtuple("SelfAttentionWB", field_names=("weights", "biases"))
+SelfAttentionW = namedtuple("SelfAttentionW", field_names=("weights"))
+EncodedAttentionW = namedtuple("EncodedAttentionW", \
+        field_names=("self_weights", "encoded_weights")) 
+EncoderParams = namedtuple("EncoderParams", \
+        field_names=("attention_weights", "mlp_params"))
+DecoderParams = namedtuple("DecoderParams", \
+        field_names=("encoded_attention", "mlp_params"))
+MLPParams = namedtuple("MLPParams", \
+        field_names=("mlp_weights", "mlp_biases", "activation"))
+
+dot = lambda a, b: jnp.dot(a, b.T)
+seq_dot = jax.vmap(dot)
+batch_seq_dot = jax.vmap(seq_dot)
+
+def mlp(x: jnp.array, parameters: MLPParams) -> jnp.array:
+
+    for ii in range(len(parameters.mlp_weights)-1):
+        
+        x = jnp.matmul(x, parameters.mlp_weights[ii]) 
+        x = parameters.activation(x + parameters.mlp_biases[ii])
+
+    x = jnp.matmul(x, parameters.mlp_weights[-1]) 
+    x = x + parameters.mlp_biases[-1]
+
+    return x
+
+def self_attention(x: jnp.array, parameters: SelfAttentionW) -> jnp.array:
+    """
+    This function is a dot product self-attention layer
+
+    args: 
+    x is the input vector (jax array) with dimensions n by s by d, where n is the
+    batch size, s is the sequence length, and d is the vector dimension
+    parameters is a SelfAttentionW named tuple which includes weights. 
+    
+
+    returns:
+    output: a jax numpy array
+    """
+
+    kqv_split = x.shape[-1]
+    
+    key_query_value = jnp.matmul(x, parameters.weights)
+
+    key = key_query_value[:,:,0:kqv_split]
+    query = key_query_value[:,:,kqv_split:2*kqv_split]
+    value = key_query_value[:,:,2*kqv_split:3*kqv_split]
+
+    raw_attention = batch_seq_dot(key, query)[:,:,None]
+
+    attention = jax.nn.softmax(raw_attention, axis=0)
+
+    output = attention * value
+    
+    return output
+
+def encoder(x: jnp.array, parameters: EncoderParams) -> jnp.array:
+
+    attention = self_attention(x, parameters.attention_weights)
+
+    output = mlp(attention, parameters.mlp_params)
+        
+    return output
+
+def encoded_attention(x: jnp.array, encoded: jnp.array, parameters: EncodedAttentionW) -> jnp.array:
+    # EncDecAttentionW = namedtuple("EncDecAttention", \
+    #    field_names=("self_weights", "encoded_weights")) 
+
+    my_self_attention = self_attention(x, parameters.self_weights)
+    encoded_attention = self_attention(encoded, parameters.encoded_weights)
+
+    output = my_self_attention + encoded_attention
+
+    return output
+
+def decoder(x: jnp.array, encoded: jnp.array, parameters: DecoderParams) -> jnp.array:
+
+    attention = encoded_attention(x, encoded, parameters.encoded_attention)
+
+    output = mlp(attention, parameters.mlp_params)
+
+    return output
 
 def bijective_forward(sequence_vectors: jnp.array, \
         parameters: NICEParametersWB, pad_to: int=1024) -> jnp.array:
@@ -99,7 +183,6 @@ def bijective_reverse(sequence_features: jnp.array, \
     args: 
     sequence_vector represents a biological sequence (DNA, RNA, or amino acid) after being translated to a jax numpy array 
     parameters contains 3 matrices representing 3 matmuls/neural layers and optional biases for each
-    pad_to is an integer specifying the final length of the sequence. If pad_to is less than len(sequence), the sequence will be truncated
 
     usage:
 
@@ -107,7 +190,7 @@ def bijective_reverse(sequence_features: jnp.array, \
     # forward pass  
     ha_tag = "YPYDVPDYA"
     sequence_vectors = sequence_to_vectors(ha_tag, aa_sequence_dict)
-    tokens = bijective_forward(sequence_vectors, parameters, pad_to=2048)
+    tokens = bijective_forward(sequence_vectors, parameters)
 
     # reverse pass 
     detokens = bijective_reverse(tokens, parameters)
