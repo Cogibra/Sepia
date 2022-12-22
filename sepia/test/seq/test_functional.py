@@ -11,10 +11,13 @@ from sepia.seq.functional import \
         NICEParametersW, \
         SelfAttentionWB, \
         SelfAttentionW, \
+        EncodedAttentionW,\
         EncoderParams, \
+        DecoderParams, \
         MLPParams, \
         self_attention, \
         encoder, \
+        decoder, \
         bijective_forward, \
         bijective_reverse
 
@@ -32,6 +35,52 @@ class TestSelfAttention(unittest.TestCase):
         attention = self_attention(self.x, self.parameters)
 
         self.assertEqual(self.x.shape, attention.shape)
+"""
+EncodedAttentionW = namedtuple("EncodedAttentionW", \
+        field_names=("self_weights", "encoded_weights")) 
+EncoderParams = namedtuple("EncoderParams", \
+        field_names=("attention_weights", "mlp_params"))
+DecoderParams = namedtuple("DecoderParams", \
+        field_names=("encoded_attention", "mlp_params"))
+MLPParams = namedtuple("MLPParams", \
+        field_names=("mlp_weights", "mlp_biases", "activation"))
+"""
+
+class TestDecoder(unittest.TestCase):
+
+    def setUp(self):
+
+        weights_a = npr.randn(12, 36)
+        self_attention_weights = SelfAttentionW(weights = weights_a)
+
+        weights_b = npr.randn(12, 36)
+        encoded_weights = SelfAttentionW(weights = weights_b)
+
+        attention_weights = EncodedAttentionW(\
+                self_weights=self_attention_weights,\
+                encoded_weights=encoded_weights)
+
+        mlp_weights = [npr.randn(12, 32), npr.randn(32,8), npr.randn(8,12)]
+        mlp_biases = [npr.randn(32,), npr.randn(8,), npr.randn(12,)]
+        mlp_activation = jax.nn.relu
+
+        mlp_params = MLPParams(mlp_weights=mlp_weights,\
+                mlp_biases=mlp_biases,\
+                activation=mlp_activation)
+
+        self.decoder_parameters = DecoderParams( \
+                encoded_attention = attention_weights, \
+                mlp_params = mlp_params)
+                
+        self.x = npr.randn(16,32,12)
+        self.encoded = npr.randn(16,32,12)
+
+
+    def test_decoder(self):
+
+        encoded = decoder(self.x, self.encoded, self.decoder_parameters)
+
+        self.assertEqual(self.x.shape, encoded.shape)
 
 class TestEncoder(unittest.TestCase):
     
@@ -53,9 +102,8 @@ class TestEncoder(unittest.TestCase):
         self.parameters = EncoderParams( \
                 attention_weights = attention_weights, \
                 mlp_params = mlp_params)
-            
 
-    def test_self_attention(self):
+    def test_encoder(self):
 
         encoded = encoder(self.x, self.parameters)
 
