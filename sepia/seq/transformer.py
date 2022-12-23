@@ -89,11 +89,9 @@ class Transformer():
                     npr.randn(self.mlp_hidden_dim,), \
                     npr.randn(self.token_dim,)]
 
-            mlp_activation = self.mlp_activation
 
             mlp_params = MLPParams(mlp_weights=mlp_weights,\
-                    mlp_biases=mlp_biases,\
-                    activation=mlp_activation)
+                    mlp_biases=mlp_biases)
 
             encoder_parameters = EncoderParams( \
                     attention_weights = attention_weights, \
@@ -112,11 +110,9 @@ class Transformer():
             mlp_biases = [npr.randn(self.mlp_hidden_dim,), \
                     npr.randn(self.mlp_hidden_dim,), \
                     npr.randn(self.token_dim,)]
-            mlp_activation = self.mlp_activation
 
             mlp_params = MLPParams(mlp_weights=mlp_weights,\
-                    mlp_biases=mlp_biases,\
-                    activation=mlp_activation)
+                    mlp_biases=mlp_biases)
 
             # decoder self-attention
             weights_a = npr.randn(self.token_dim, self.encoder_dim)
@@ -136,28 +132,30 @@ class Transformer():
 
             self.decoder_stack.append(decoder_parameters)
 
-    def forward(self, x: jnp.array) -> jnp.array:
+    def forward(self, x: jnp.array, parameters: tuple) -> jnp.array:
         """
         numerical pass
         called after converting string sequences to vectors 
         """
-        
-        tokens = bijective_forward(x, self.token_parameters)[None,:,:]
 
+        token_parameters = parameters[0]
+        encoder_stack = parameters[1]
+        decoder_stack = parameters[2]
+        
         # encoder stack: list of encoder parameters
-        encoded = tokens
-        for encoder_params in self.encoder_stack:
+        encoded = x #tokens
+        for encoder_params in encoder_stack:
 
             encoded = encoder(encoded, encoder_params)
 
         # encoder stack: list of encoder parameters
         decoded = 1.0 * encoded
-        for decoder_params in self.decoder_stack:
+        for decoder_params in decoder_stack:
 
             decoded = decoder(decoded, encoded, decoder_params)
 
         output_tokens = bijective_reverse(decoded[0], \
-                self.token_parameters)
+                token_parameters)
 
         return output_tokens
 
@@ -178,19 +176,60 @@ class Transformer():
         # convert string sequence to numerical vector
         vector = sequence_to_vectors(sequence, self.sequence_dict, \
                 pad_to = self.seq_length)
-        output_tokens = self.forward(vector)
+
+        parameters = (self.token_parameters, \
+                self.encoder_stack, \
+                self.decoder_stack)
+
+        input_tokens = bijective_forward(vector, self.token_parameters)[None,:,:]
+        output_tokens = self.forward(input_tokens, parameters)
         output_sequence = vectors_to_sequence(output_tokens, self.sequence_dict)
 
         # use vmap for multiple sequence at once?
 
         return output_sequence
 
-    def train_step(self):
-        pass
+    def get_loss(self, masked_tokens, target, parameters) -> float:
+        
+        predicted_tokens = self.forward(masked_tokens, parameters)
+
+        loss = jnp.mean(jnp.sqrt((predicted_tokens - target)**2))
+
+        return loss
+
+    def train_step(self, batch: tuple):
+
+        sequence = batch[0]
+
+        vector = sequence_to_vectors(sequence, self.sequence_dict, \
+                pad_to = self.seq_length)
+
+        input_tokens = bijective_forward(vector, self.token_parameters)[None,:,:]
+
+        parameters = (self.token_parameters, \
+                self.encoder_stack, \
+                self.decoder_stack)
+
+        self.mask_rate = 0.2
+
+        masked_tokens = input_tokens \
+                * (npr.rand(*input_tokens.shape[:2],1) > self.mask_rate)
+
+        grad_loss = grad(self.get_loss, argnums=2)
+        loss = self.get_loss(masked_tokens, input_tokens, parameters)
+
+        my_grad = grad_loss(masked_tokens, input_tokens, parameters)
+
+        import pdb; pdb.set_trace()
+
 
     def fit(self, **kwargs):
         # training loop
-        pass
+
+        max_steps = 10
+        for step in range(max_steps):
+            pass
+
 
 if __name__ == "__main__":
 

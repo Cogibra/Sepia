@@ -62,11 +62,9 @@ class TestDecoder(unittest.TestCase):
 
         mlp_weights = [npr.randn(12, 32), npr.randn(32,8), npr.randn(8,12)]
         mlp_biases = [npr.randn(32,), npr.randn(8,), npr.randn(12,)]
-        mlp_activation = jax.nn.relu
 
         mlp_params = MLPParams(mlp_weights=mlp_weights,\
-                mlp_biases=mlp_biases,\
-                activation=mlp_activation)
+                mlp_biases=mlp_biases)
 
         self.decoder_parameters = DecoderParams( \
                 encoded_attention = attention_weights, \
@@ -93,11 +91,9 @@ class TestEncoder(unittest.TestCase):
 
         mlp_weights = [npr.randn(12, 32), npr.randn(32,8), npr.randn(8,12)]
         mlp_biases = [npr.randn(32,), npr.randn(8,), npr.randn(12,)]
-        mlp_activation = jax.nn.relu
 
         mlp_params = MLPParams(mlp_weights=mlp_weights,\
-                mlp_biases=mlp_biases,\
-                activation=mlp_activation)
+                mlp_biases=mlp_biases)
 
         self.parameters = EncoderParams( \
                 attention_weights = attention_weights, \
