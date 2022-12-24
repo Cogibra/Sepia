@@ -227,31 +227,6 @@ class Transformer():
         return loss, my_grad
 
     def optimizer_step(self, parameters, gradients):
-
-        """
-        (token_parameters, encoder_stack, decoder_stack)
-        
-        token_parameters: 
-            NICEParametersW = namedtuple("NICEParametersW", field_names=("weights"))
-        encoder_stack:
-            [EncoderParams = namedtuple("EncoderParams", field_names=("attention_weights", "mlp_params"))]
-            which includesi as attention_weights, mlp_params:
-                SelfAttentionW = namedtuple("SelfAttentionW", field_names=("weights"))
-                MLPParams = namedtuple("MLPParams", \
-                        field_names=("mlp_weights", "mlp_biases"))
-        decoder_stackk:
-            [DecoderParams = namedtuple("DecoderParams", field_names=("encoded_attention", "mlp_params"))]
-            which includes as encoded_attention, mlp_params:
-                EncodedAttentionW = namedtuple("EncodedAttentionW", \
-                        field_names=("self_weights", "encoded_weights")) 
-                which includes as self_weights, encoded_weights:
-                    SelfAttentionW = namedtuple("SelfAttentionW", field_names=("weights"))
-                    SelfAttentionW = namedtuple("SelfAttentionW", field_names=("weights"))
-                MLPParams = namedtuple("MLPParams", \
-                        field_names=("mlp_weights", "mlp_biases"))
-
-        """
-        
         # SGD 
         ## token params
         token_weights = parameters[0].weights - self.lr * gradients[0].weights
