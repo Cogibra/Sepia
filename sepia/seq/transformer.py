@@ -55,8 +55,8 @@ class Transformer():
 
         # expose these to user
         self.seq_length = 32
-        self.encoder_size = 8
-        self.decoder_size = 8
+        self.encoder_size = query_kwargs("encoder_size", 4, **kwargs)
+        self.decoder_size = query_kwargs("decoder_size", 4, **kwargs)
         self.hidden_dim = 64
         self.mlp_hidden_dim = 48 
         self.mlp_activation = jax.nn.relu
@@ -332,7 +332,8 @@ class Transformer():
         # dataloader is an iterable that returns batches
 
         max_steps = query_kwargs("max_steps", 100, **kwargs)
-        display_every = max_steps // 16
+        display_count = query_kwargs("display_count", 2, **kwargs)
+        display_every = max_steps // display_count
         
         for step in range(max_steps):
             
