@@ -22,18 +22,18 @@ EncoderParams = namedtuple("EncoderParams", \
 DecoderParams = namedtuple("DecoderParams", \
         field_names=("encoded_attention", "mlp_params"))
 MLPParams = namedtuple("MLPParams", \
-        field_names=("mlp_weights", "mlp_biases", "activation"))
+        field_names=("mlp_weights", "mlp_biases"))
 
 dot = lambda a, b: jnp.dot(a, b.T)
 seq_dot = jax.vmap(dot)
 batch_seq_dot = jax.vmap(seq_dot)
 
-def mlp(x: jnp.array, parameters: MLPParams) -> jnp.array:
+def mlp(x: jnp.array, parameters: MLPParams, activation=jax.nn.relu) -> jnp.array:
 
     for ii in range(len(parameters.mlp_weights)-1):
         
         x = jnp.matmul(x, parameters.mlp_weights[ii]) 
-        x = parameters.activation(x + parameters.mlp_biases[ii])
+        x = activation(x + parameters.mlp_biases[ii])
 
     x = jnp.matmul(x, parameters.mlp_weights[-1]) 
     x = x + parameters.mlp_biases[-1]
