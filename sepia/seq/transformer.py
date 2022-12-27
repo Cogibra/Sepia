@@ -9,7 +9,8 @@ import numpy.random as npr
 
 from collections import namedtuple
 
-from sepia.common import query_kwargs
+from sepia.common import query_kwargs, \
+        optimizer_step
 
 from sepia.seq.data import \
         aa_keys, \
@@ -26,6 +27,7 @@ from sepia.seq.functional import \
         EncodedAttentionW, \
         EncoderParams, \
         DecoderParams, \
+        make_layers_tuple, \
         MLPParams 
 
 # functions
@@ -39,6 +41,9 @@ from sepia.seq.data import \
         get_sequence_dict, \
         vectors_to_sequence, \
         sequence_to_vectors
+
+TransformerParams = namedtuple("TransformerParams", \
+        field_names=("token_params", "encoder_params", "decoder_params"))
 
 class Transformer():
 
@@ -78,7 +83,8 @@ class Transformer():
         self.token_parameters = NICEParametersW(weights=token_weights)
 
         # encoder stack
-        self.encoder_stack = []
+        encoder_stack = []
+        EncoderStack = make_layers_tuple(depth=self.decoder_size, name="decoder")
         for ii in range(self.encoder_size): 
             weights = npr.randn(self.token_dim, self.encoder_dim)*self.init_scale
             attention_weights = SelfAttentionW(weights = weights)
@@ -91,6 +97,11 @@ class Transformer():
                     npr.randn(self.mlp_hidden_dim,)*self.init_scale, \
                     npr.randn(self.token_dim,)*self.init_scale]
 
+            mlp_weights_tuple = make_layers_tuple(depth=len(mlp_weights), name="weights")
+            mlp_biases_tuple = make_layers_tuple(depth=len(mlp_biases), name="biases")
+
+            mlp_weights = mlp_weights_tuple(*mlp_weights)
+            mlp_biases = mlp_biases_tuple(*mlp_biases)
 
             mlp_params = MLPParams(mlp_weights=mlp_weights,\
                     mlp_biases=mlp_biases)
@@ -99,11 +110,13 @@ class Transformer():
                     attention_weights = attention_weights, \
                     mlp_params = mlp_params)
 
-            self.encoder_stack.append(encoder_parameters)
+            encoder_stack.append(encoder_parameters)
+        self.encoder_stack = EncoderStack(*encoder_stack)
 
 
         # decoder stack
-        self.decoder_stack = []
+        decoder_stack = []
+        DecoderStack = make_layers_tuple(depth=self.decoder_size, name="decoder")
         for ii in range(self.decoder_size): 
             mlp_weights = [npr.randn(self.token_dim, self.mlp_hidden_dim)*self.init_scale, \
                     npr.randn(self.mlp_hidden_dim, self.mlp_hidden_dim)*self.init_scale, \
@@ -112,6 +125,12 @@ class Transformer():
             mlp_biases = [npr.randn(self.mlp_hidden_dim,)*self.init_scale, \
                     npr.randn(self.mlp_hidden_dim,)*self.init_scale, \
                     npr.randn(self.token_dim,)*self.init_scale]
+
+            mlp_weights_tuple = make_layers_tuple(depth=len(mlp_weights), name="weights")
+            mlp_biases_tuple = make_layers_tuple(depth=len(mlp_biases), name="biases")
+
+            mlp_weights = mlp_weights_tuple(*mlp_weights)
+            mlp_biases = mlp_biases_tuple(*mlp_biases)
 
             mlp_params = MLPParams(mlp_weights=mlp_weights,\
                     mlp_biases=mlp_biases)
@@ -132,7 +151,13 @@ class Transformer():
                 encoded_attention = attention_weights, \
                 mlp_params = mlp_params)
 
-            self.decoder_stack.append(decoder_parameters)
+            decoder_stack.append(decoder_parameters)
+
+        self.decoder_stack = DecoderStack(*decoder_stack)
+
+        self.parameters = TransformerParams(self.token_parameters, \
+                self.encoder_stack, \
+                self.decoder_stack)
 
     def forward(self, x: jnp.array, parameters: tuple) -> jnp.array:
         """
@@ -179,7 +204,7 @@ class Transformer():
         vector = sequence_to_vectors(sequence, self.sequence_dict, \
                 pad_to = self.seq_length)
 
-        parameters = (self.token_parameters, \
+        parameters = TransformerParams(self.token_parameters, \
                 self.encoder_stack, \
                 self.decoder_stack)
 
@@ -208,10 +233,6 @@ class Transformer():
 
         input_tokens = bijective_forward(vector, self.token_parameters)[None,:,:]
 
-        parameters = [self.token_parameters, \
-                self.encoder_stack, \
-                self.decoder_stack]
-
 
         masked_tokens = input_tokens \
                 * (npr.rand(*input_tokens.shape[:2],1) > self.mask_rate)
@@ -219,87 +240,11 @@ class Transformer():
         grad_loss = grad(self.get_loss, argnums=2)
 
         # splitting these roles (returning loss or returning grads) might speed up training
-        loss = self.get_loss(masked_tokens, input_tokens, parameters)
-        my_grad = grad_loss(masked_tokens, input_tokens, parameters)
+        loss = self.get_loss(masked_tokens, input_tokens, self.parameters)
+        my_grad = grad_loss(masked_tokens, input_tokens, self.parameters)
 
-        self.parameters = parameters
 
         return loss, my_grad
-
-    def optimizer_step(self, parameters, gradients):
-        # SGD 
-        ## token params
-        token_weights = parameters[0].weights - self.lr * gradients[0].weights
-        self.token_parameters = NICEParametersW(weights=token_weights)
-
-        ## encoder_stack params
-        self.encoder_stack = []
-        for ii in range(len(parameters[1])):
-            self_weights = parameters[1][ii].attention_weights.weights \
-                    - self.lr * gradients[1][ii].attention_weights.weights
-            """
-            mlp_weights = [npr.randn(self.token_dim, self.mlp_hidden_dim)*self.init_scale, \
-                    npr.randn(self.mlp_hidden_dim, self.mlp_hidden_dim)*self.init_scale, \
-                    npr.randn(self.mlp_hidden_dim, self.token_dim)*self.init_scale]
-
-            mlp_biases = [npr.randn(self.mlp_hidden_dim,)*self.init_scale, \
-                    npr.randn(self.mlp_hidden_dim,)*self.init_scale, \
-                    npr.randn(self.token_dim,)*self.init_scale]
-
-            mlp_params = MLPParams(mlp_weights=mlp_weights,\
-                    mlp_biases=mlp_biases)
-            """
-            mlp_weights = []
-            mlp_biases = []
-            for kk in range(len(parameters[1][ii].mlp_params.mlp_weights)):
-                mlp_weights.append(parameters[1][ii].mlp_params.mlp_weights[kk] - \
-                        self.lr * gradients[1][ii].mlp_params.mlp_weights[kk])
-                mlp_biases.append(parameters[1][ii].mlp_params.mlp_biases[kk] - \
-                        self.lr * gradients[1][ii].mlp_params.mlp_biases[kk])
-
-            mlp_params = MLPParams(mlp_weights=mlp_weights, mlp_biases=mlp_biases)
-
-            #mlp_params = parameters[1][ii].mlp_params
-
-            attention_weights = SelfAttentionW(weights=self_weights)
-            encoder_parameters = EncoderParams( \
-                    attention_weights = attention_weights, \
-                    mlp_params = mlp_params)
-
-            self.encoder_stack.append(encoder_parameters)
-
-        ## decoder stack params
-        self.decoder_stack = []
-        for jj in range(len(parameters[2])):
-
-            self_self_weights = parameters[2][jj].encoded_attention.self_weights.weights - \
-                    self.lr * gradients[2][jj].encoded_attention.self_weights.weights
-            encoded_self_weights = parameters[2][jj].encoded_attention.encoded_weights.weights - \
-                    self.lr * gradients[2][jj].encoded_attention.encoded_weights.weights
-
-            self_weights = SelfAttentionW(weights=self_self_weights)
-            encoded_weights = SelfAttentionW(weights=encoded_self_weights)
-
-            mlp_weights = []
-            mlp_biases = []
-            for kk in range(len(parameters[2][jj].mlp_params.mlp_weights)):
-                mlp_weights.append(parameters[2][jj].mlp_params.mlp_weights[kk] - \
-                        self.lr * gradients[2][jj].mlp_params.mlp_weights[kk])
-                mlp_biases.append(parameters[2][jj].mlp_params.mlp_biases[kk] - \
-                        self.lr * gradients[2][jj].mlp_params.mlp_biases[kk])
-
-            mlp_params = MLPParams(mlp_weights=mlp_weights, mlp_biases=mlp_biases)
-            #mlp_parms = parameters[2][jj].mlp_params
-
-            encoded_attention = EncodedAttentionW(self_weights=self_weights, \
-                    encoded_weights=encoded_weights)
-
-            decoder_parameters = DecoderParams( \
-                encoded_attention = encoded_attention, \
-                mlp_params = mlp_params)
-
-            self.decoder_stack.append(decoder_parameters)
-            #self.decoder_stack.append(DecoderParams(encoded_attention=encoded_attention, mlp_params=mlp_params))
 
     def fit(self, dataloader, **kwargs) -> None:
         # training loop
@@ -319,7 +264,8 @@ class Transformer():
 
                 cumulative_loss = loss if cumulative_loss is None else cumulative_loss+loss  
 
-                self.optimizer_step(self.parameters, my_grad)
+
+                self.parameters = optimizer_step(self.parameters, my_grad, lr=self.lr)
 
 
             if step % display_every == 0:
@@ -338,7 +284,7 @@ if __name__ == "__main__":
 
     print(model(ha_tag))
 
-    model.fit(dataloader, max_steps=5555)
+    model.fit(dataloader, max_steps=1500)
 
     print(model(ha_tag))
 
