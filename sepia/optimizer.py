@@ -28,7 +28,8 @@ def adam(gradient: jnp.array, info: tuple=None) -> tuple:
 
     takes a gradient parameter array and info, returns update array
     
-    This update function is basically an identity function, because SGD has no memory.
+    adam updates calculate the first and second moments of the gradient
+    the moments and exponential averaging parameters are contained in info. 
 
     info is a tuple consisting of 
         (beta_0, beta_1, moment, moment_2
@@ -36,7 +37,6 @@ def adam(gradient: jnp.array, info: tuple=None) -> tuple:
         beta_1: exponential averaging variable for second moment
         moment: first moment (exponential average of gradient)
         moment_2: second moment (exponential average of gradient^2
-
     """
 
     if info is not None:
@@ -70,6 +70,3 @@ def step(parameters: namedtuple, gradients: namedtuple, \
     new_parameters = type(parameters)(**new_params)
 
     return new_parameters, info
-
-
-
