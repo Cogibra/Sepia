@@ -1,13 +1,14 @@
 Name                        Stmts   Miss  Cover
 -----------------------------------------------
 sepia/__init__.py               0      0   100%
-sepia/common.py                 4      0   100%
+sepia/common.py                11      0   100%
 sepia/graph/__init__.py         0      0   100%
 sepia/graph/data.py            13      7    46%
 sepia/graph/functional.py      26     17    35%
+sepia/optimizer.py             29      1    97%
 sepia/seq/__init__.py           0      0   100%
 sepia/seq/data.py              36     11    69%
-sepia/seq/functional.py        87      0   100%
-sepia/seq/transformer.py      138     13    91%
+sepia/seq/functional.py        91      0   100%
+sepia/seq/transformer.py      122     12    90%
 -----------------------------------------------
-TOTAL                         304     48    84%
+TOTAL                         328     48    85%
