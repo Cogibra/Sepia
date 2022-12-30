@@ -9,8 +9,8 @@ import numpy.random as npr
 
 from collections import namedtuple
 
-from sepia.common import query_kwargs, \
-        optimizer_step
+from sepia.common import query_kwargs
+import sepia.optimizer as optimizer
 
 from sepia.seq.data import \
         aa_keys, \
@@ -159,6 +159,9 @@ class Transformer():
                 self.encoder_stack, \
                 self.decoder_stack)
 
+        self.update = optimizer.adam
+        self.update_info = None
+
     def forward(self, x: jnp.array, parameters: tuple) -> jnp.array:
         """
         numerical pass
@@ -265,7 +268,9 @@ class Transformer():
                 cumulative_loss = loss if cumulative_loss is None else cumulative_loss+loss  
 
 
-                self.parameters = optimizer_step(self.parameters, my_grad, lr=self.lr)
+                self.parameters, self.update_info = optimizer.step(\
+                        self.parameters, my_grad, lr=self.lr, \
+                        update=self.update, info=self.update_info)
 
 
             if step % display_every == 0:
@@ -288,6 +293,5 @@ if __name__ == "__main__":
 
     print(model(ha_tag))
 
-    import pdb; pdb.set_trace()
     #fit(self, dataloader, **kwargs) -> None:
 
