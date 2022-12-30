@@ -28,6 +28,13 @@ dot = lambda a, b: jnp.dot(a, b.T)
 seq_dot = jax.vmap(dot)
 batch_seq_dot = jax.vmap(seq_dot)
 
+def make_layers_tuple(depth: int, name: str="weights") -> namedtuple:
+
+    field_names = [f"{name}{ii}" for ii in range(depth)]
+    layers_tuple = namedtuple(f"{name}", field_names)
+
+    return layers_tuple
+
 def mlp(x: jnp.array, parameters: MLPParams, activation=jax.nn.relu) -> jnp.array:
 
     for ii in range(len(parameters.mlp_weights)-1):
