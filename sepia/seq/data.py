@@ -42,15 +42,29 @@ def token_to_one_hot(token: jnp.array, one_hot: jnp.array) -> jnp.array:
 
 vmap_to_one_hots = jax.vmap(token_to_one_hot)
 
-def tokens_to_one_hot(tokens: jnp.array, max_length: int=None) -> jnp.array:
+def tokens_to_one_hot(tokens: jnp.array, pad_classes_to: int=None, \
+        pad_to: int=None) -> jnp.array:
 
-    if max_length is None:
-        max_length = jnp.max(tokens)+1
+    if pad_to is None:
+        pad_to = tokens.shape[0]
+    if pad_classes_to is None:
+        pad_classes_to = jnp.max(tokens)+1
 
     # pre-allocate one-hot array
-    one_hots = jnp.zeros((tokens.shape[0], max_length))
+    one_hots = jnp.zeros((pad_to, pad_to))
 
     return vmap_to_one_hots(tokens, one_hots)
+
+def compose_batch_tokens_to_one_hots(\
+        pad_to: int, pad_classes_to: int) -> type(lambda x: x):
+
+    one_hots = jnp.zeros((pad_to,  pad_classes_to)) 
+    def batch_tokens_to_one_hots(tokens):
+
+        return vmap_to_one_hots(tokens, one_hots)
+    
+    return jax.vmap(batch_tokens_to_one_hots)
+
 
 def sequence_to_vectors(sequence: str, sequence_dict: dict, pad_to: int=256) -> jnp.array:
 
