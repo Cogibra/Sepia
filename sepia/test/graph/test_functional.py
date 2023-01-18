@@ -8,7 +8,7 @@ import numpy.random as npr
 from sepia.graph.functional import \
         GraphParametersWB, \
         graph_conv, \
-        get_graph_conv_auto_loss, \
+        calc_graph_conv_auto_loss, \
         grad_graph_conv_auto_loss
 
 from sepia.graph.data import parse_edges_to_adjacency

@@ -7,7 +7,7 @@ import numpy.random as npr
 aa_keys = "arndcqeghilkmfpstwyvuox"
 NULL_ELEMENT = "-"
 
-def get_sequence_dict(vocabulary: str, vector_length: int=32, my_seed: int=42) -> dict:
+def make_sequence_dict(vocabulary: str, vector_length: int=32, my_seed: int=42) -> dict:
 
     sequence_dict = {}
 
@@ -23,7 +23,7 @@ def get_sequence_dict(vocabulary: str, vector_length: int=32, my_seed: int=42) -
 
     return sequence_dict
 
-def get_token_dict(vocabulary: str) -> dict:
+def make_token_dict(vocabulary: str) -> dict:
 
     token_dict = {}
 

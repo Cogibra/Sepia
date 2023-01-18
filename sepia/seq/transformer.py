@@ -14,7 +14,7 @@ import sepia.optimizer as optimizer
 
 from sepia.seq.data import \
         aa_keys, \
-        get_sequence_dict, \
+        make_sequence_dict, \
         vectors_to_sequence, \
         sequence_to_vectors
 
@@ -38,7 +38,7 @@ from sepia.seq.functional import \
         bijective_reverse
 
 from sepia.seq.data import \
-        get_sequence_dict, \
+        make_sequence_dict, \
         vectors_to_sequence, \
         sequence_to_vectors
 
@@ -74,7 +74,7 @@ class Transformer():
 
     def initialize_model(self):
 
-        self.sequence_dict = get_sequence_dict(self.vocab, self.token_dim, my_seed=self.my_seed)
+        self.sequence_dict = make_sequence_dict(self.vocab, self.token_dim, my_seed=self.my_seed)
         
         # tokenizer
         # tokenizer mlp transforms 1/3 of the vector at a time (NICE)
@@ -219,7 +219,7 @@ class Transformer():
 
         return output_sequence
 
-    def get_loss(self, masked_tokens, target, parameters) -> float:
+    def calc_loss(self, masked_tokens, target, parameters) -> float:
         
         predicted_tokens = self.forward(masked_tokens, parameters)
 
@@ -240,10 +240,10 @@ class Transformer():
         masked_tokens = input_tokens \
                 * (npr.rand(*input_tokens.shape[:2],1) > self.mask_rate)
 
-        grad_loss = grad(self.get_loss, argnums=2)
+        grad_loss = grad(self.calc_loss, argnums=2)
 
         # splitting these roles (returning loss or returning grads) might speed up training
-        loss = self.get_loss(masked_tokens, input_tokens, self.parameters)
+        loss = self.calc_loss(masked_tokens, input_tokens, self.parameters)
         my_grad = grad_loss(masked_tokens, input_tokens, self.parameters)
 
 
@@ -289,7 +289,7 @@ if __name__ == "__main__":
 
     print(model(ha_tag))
 
-    model.fit(dataloader, max_steps=1500)
+    model.fit(dataloader, max_steps=10)
 
     print(model(ha_tag))
 

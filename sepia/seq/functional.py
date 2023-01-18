@@ -7,7 +7,7 @@ import numpy.random as npr
 from collections import namedtuple
 
 from sepia.seq.data import \
-        get_sequence_dict, \
+        make_sequence_dict, \
         vectors_to_sequence, \
         sequence_to_vectors
 

@@ -27,7 +27,7 @@ def graph_conv(batch: GraphBatchTuple, parameters: GraphParametersWB) -> GraphBa
     return new_node_features
     
 
-def get_graph_conv_auto_loss(batch: GraphBatchTuple, parameters: GraphParametersWB) -> jnp.float32:
+def calc_graph_conv_auto_loss(batch: GraphBatchTuple, parameters: GraphParametersWB) -> jnp.float32:
 
     target = 1.0 * batch.node_features
 
@@ -44,5 +44,5 @@ def get_graph_conv_auto_loss(batch: GraphBatchTuple, parameters: GraphParameters
 
     return loss
 
-grad_graph_conv_auto_loss = grad(get_graph_conv_auto_loss, argnums=(1), allow_int=True)
+grad_graph_conv_auto_loss = grad(calc_graph_conv_auto_loss, argnums=(1), allow_int=True)
 
