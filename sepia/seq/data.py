@@ -55,6 +55,8 @@ def tokens_to_one_hot(tokens: jnp.array, pad_classes_to: int=None, \
 
     return vmap_to_one_hot(tokens, one_hot)
 
+batch_tokens_to_one_hot = jax.vmap(tokens_to_one_hot, in_axes=(0, None, None))
+
 def compose_batch_tokens_to_one_hot(\
         pad_to: int, pad_classes_to: int) -> type(lambda x: x):
 
@@ -66,7 +68,7 @@ def compose_batch_tokens_to_one_hot(\
     return jax.vmap(batch_tokens_to_one_hot)
 
 
-def sequence_to_vectors(sequence: str, sequence_dict: dict, pad_to: int=256) -> jnp.array:
+def sequence_to_vectors(sequence: str, sequence_dict: dict, pad_to: int=64) -> jnp.array:
 
     vectors = None
 
@@ -80,6 +82,18 @@ def sequence_to_vectors(sequence: str, sequence_dict: dict, pad_to: int=256) -> 
     while vectors.shape[0] < pad_to:
         vectors = np.append(vectors, sequence_dict[NULL_ELEMENT], axis=0)
 
+    return vectors
+
+def batch_sequence_to_vectors(batch: tuple, sequence_dict, pad_to: int=64) -> jnp.array:
+
+    vectors = None
+    for my_item in batch:
+
+        if vectors is None:
+            vectors = sequence_to_vectors(my_item, sequence_dict, pad_to)[None,:,:]
+        else:
+            vector = sequence_to_vectors(my_item, sequence_dict, pad_to)[None,:,:]
+            vectors = jnp.append(vectors, vector, axis=0) 
     return vectors
 
 def one_hot_to_sequence(one_hot: jnp.array, sequence_dict: dict) -> str:

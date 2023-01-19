@@ -181,6 +181,8 @@ def bijective_forward(sequence_vectors: jnp.array, \
     
     return tokens
 
+batch_bijective_forward = jax.vmap(bijective_forward, in_axes=(0,None))
+
 def bijective_reverse(sequence_features: jnp.array, \
         parameters: NICEParametersWB) -> jnp.array:
     """
@@ -241,3 +243,5 @@ def bijective_reverse(sequence_features: jnp.array, \
     sequence_vectors = jnp.append(u_12, u_22, axis=-1)
 
     return sequence_vectors
+
+batch_bijective_reverse = jax.vmap(bijective_reverse, in_axes=(0,None))

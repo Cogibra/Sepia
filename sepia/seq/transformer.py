@@ -21,7 +21,8 @@ from sepia.seq.data import \
         compose_batch_tokens_to_one_hot, \
         one_hot_to_sequence, \
         vectors_to_sequence, \
-        sequence_to_vectors
+        sequence_to_vectors, \
+        batch_sequence_to_vectors
 
 # parameters (namedtuples)
 from sepia.seq.functional import \
@@ -40,6 +41,8 @@ from sepia.seq.functional import \
         encoder, \
         decoder, \
         bijective_forward, \
+        batch_bijective_forward, \
+        batch_bijective_reverse, \
         bijective_reverse
 
 from sepia.seq.data import \
@@ -59,7 +62,7 @@ def cross_entropy(predicted: jnp.array, target: jnp.array, ignore_index: int=0) 
 
     ce = target * jnp.log(predicted_softmax) * dont_ignore
 
-    assert jnp.mean(ce) >= 0.0, f"c. entropy negative {jnp.mean(-ce)}\n targets: {target}\n pred {predicted_softmax}"
+    assert jnp.mean(ce) <= 0.0, f"c. entropy negative {-jnp.mean(ce)}\n targets: {target.max()}\n pred {predicted_softmax.max()}"
 
     return - jnp.mean(ce)
 
@@ -242,6 +245,7 @@ class Transformer():
                 self.decoder_stack)
 
         vector_tokens = bijective_forward(one_hot, self.token_parameters)[None,:,:]
+        #vector_tokens = batch_bijective_forward(one_hot, self.token_parameters)
         #decoded = self.forward(one_hot[None,:,:], self.parameters)
         decoded = self.forward(vector_tokens, self.parameters)
         output_tokens = bijective_reverse(decoded[0], \
@@ -259,40 +263,40 @@ class Transformer():
 
     def calc_loss(self, masked_tokens, target, parameters) -> float:
 
-        
-        decoded = self.forward(masked_tokens[None,:,:], parameters)
-        predicted_tokens = bijective_reverse(decoded[0], \
-                parameters[0])
+        decoded = self.forward(masked_tokens, parameters)
 
-#        print("calc_loss decoded, masked")
-#        print(jnp.argmax(decoded[0], axis=-1))
-#        print(jnp.argmax(masked_tokens, axis=-1))
-        #loss = self.loss_fn(decoded[0], target)
-        loss = self.loss_fn(predicted_tokens[0], target)
+        predicted_tokens = batch_bijective_reverse(decoded, \
+                parameters[0])
+#        predicted_tokens = bijective_reverse(decoded[0], \
+#                parameters[0])
+
+        loss = self.loss_fn(predicted_tokens, target)
 
         return loss
 
     def train_step(self, batch: tuple):
 
-
-        sequence = batch[0]
-
-        tokens = sequence_to_vectors(sequence, self.token_dict, \
+        # move the next 3 lines functionality to the dataloader
+        tokens = batch_sequence_to_vectors(batch, self.token_dict, \
                 pad_to = self.seq_length)
-        one_hot = tokens_to_one_hot(tokens, pad_to = self.seq_length,\
+        batch_t2oh = compose_batch_tokens_to_one_hot(pad_to = self.seq_length,\
                 pad_classes_to = self.token_dim)
+        one_hot = batch_t2oh(tokens)
+        # move the previous 3 lines functionality to dataloader
 
-        vector_tokens = bijective_forward(one_hot, self.token_parameters)[None,:,:]
+        # didn't work
+        #one_hot = batch_tokens_to_one_hot(tokens, pad_to = self.seq_length,\
+        #        pad_classes_to = self.token_dim)
 
-        masked_tokens = vector_tokens[0] \
-                * (npr.rand(*one_hot.shape[0:1],1) > self.mask_rate)
+        vector_tokens = batch_bijective_forward(one_hot, self.token_parameters)
+
+        vector_mask = 1.0 * (npr.rand(*vector_tokens.shape[:-1],1) > self.mask_rate)
+
+        masked_tokens = vector_tokens * vector_mask \
 
         grad_loss = grad(self.calc_loss, argnums=2)
 
         # splitting these roles (returning loss or returning grads) might speed up training
-#        print("train_step masked, one_hot")
-#        print(jnp.argmax(masked_tokens, axis=-1))
-#        print(jnp.argmax(one_hot, axis=-1))
         loss = self.calc_loss(masked_tokens, one_hot, self.parameters)
         my_grad = grad_loss(masked_tokens, one_hot, self.parameters)
 
@@ -340,7 +344,7 @@ if __name__ == "__main__":
 
     ha_tag = "YPYDVPDYA"
 
-    dataloader = [[ha_tag]]
+    dataloader = [[ha_tag, ha_tag, ha_tag]]
 
     print(model(ha_tag))
 
