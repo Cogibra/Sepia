@@ -5,7 +5,7 @@ import jax
 import numpy as np
 import numpy.random as npr
 aa_keys = "arndcqeghilkmfpstwyvuox"
-NULL_ELEMENT = "-"
+NULL_ELEMENT = None
 
 def make_sequence_dict(vocabulary: str, vector_length: int=32, my_seed: int=42) -> dict:
 
@@ -91,10 +91,10 @@ def one_hot_to_sequence(one_hot: jnp.array, sequence_dict: dict) -> str:
 
         index = jnp.argmax(element).item()
         if index in key_dict.keys():
-            sequence += key_dict[index]
+            sequence += key_dict[index] if index != 0 else ""
         else:
             print(index)
-            sequence += key_dict[list(key_dict.keys())[0]]
+            sequence += "" #key_dict[list(key_dict.keys())[0]]
 
     return sequence
 

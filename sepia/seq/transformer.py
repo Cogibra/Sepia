@@ -50,10 +50,16 @@ from sepia.seq.data import \
 TransformerParams = namedtuple("TransformerParams", \
         field_names=("token_params", "encoder_params", "decoder_params"))
 
-def cross_entropy(predicted: jnp.array, target: jnp.array) -> float:
+def cross_entropy(predicted: jnp.array, target: jnp.array, ignore_index: int=0) -> float:
 
     predicted_softmax = jax.nn.softmax(predicted)
-    ce = target * jnp.log(predicted_softmax)\
+
+    if ignore_index is not None:
+        dont_ignore = 1.0 * (jnp.argmax(target) != ignore_index)
+
+    ce = target * jnp.log(predicted_softmax) * dont_ignore
+
+    assert jnp.mean(ce) >= 0.0, f"c. entropy negative {jnp.mean(-ce)}\n targets: {target}\n pred {predicted_softmax}"
 
     return - jnp.mean(ce)
 
@@ -91,7 +97,7 @@ class Transformer():
         self.my_seed = 13
         self.init_scale = 1e-1
         self.mask_rate = 0.05
-        self.lr = query_kwargs("lr", 1e-2, **kwargs)
+        self.lr = query_kwargs("lr", 3e-3, **kwargs)
         self.loss_fn = cross_entropy
 
         self.initialize_model()
@@ -236,13 +242,16 @@ class Transformer():
                 self.decoder_stack)
 
         vector_tokens = bijective_forward(one_hot, self.token_parameters)[None,:,:]
-        decoded = self.forward(one_hot[None,:,:], self.parameters)
+        #decoded = self.forward(one_hot[None,:,:], self.parameters)
+        decoded = self.forward(vector_tokens, self.parameters)
         output_tokens = bijective_reverse(decoded[0], \
                 self.token_parameters)
 
-        output_sequence = one_hot_to_sequence(decoded[0], self.token_dict)
-        print(jnp.argmax(decoded[0], axis=-1))
-        print(jnp.argmax(one_hot, axis=-1))
+        #output_sequence = one_hot_to_sequence(decoded[0], self.token_dict)
+        output_sequence = one_hot_to_sequence(output_tokens, self.token_dict)
+#        print(jnp.argmax(decoded[0], axis=-1))
+#        print(jnp.argmax(output_tokens, axis=-1))
+#        print(jnp.argmax(one_hot, axis=-1))
 
         # use vmap for multiple sequ/biaseence at once?
 
@@ -258,11 +267,13 @@ class Transformer():
 #        print("calc_loss decoded, masked")
 #        print(jnp.argmax(decoded[0], axis=-1))
 #        print(jnp.argmax(masked_tokens, axis=-1))
-        loss = self.loss_fn(decoded[0], target)
+        #loss = self.loss_fn(decoded[0], target)
+        loss = self.loss_fn(predicted_tokens[0], target)
 
         return loss
 
     def train_step(self, batch: tuple):
+
 
         sequence = batch[0]
 
@@ -273,8 +284,8 @@ class Transformer():
 
         vector_tokens = bijective_forward(one_hot, self.token_parameters)[None,:,:]
 
-        masked_tokens = one_hot #\
-        #        * (npr.rand(*one_hot.shape[0:1],1) > self.mask_rate)
+        masked_tokens = vector_tokens[0] \
+                * (npr.rand(*one_hot.shape[0:1],1) > self.mask_rate)
 
         grad_loss = grad(self.calc_loss, argnums=2)
 
@@ -325,7 +336,7 @@ class Transformer():
 
 if __name__ == "__main__":
 
-    model = Transformer()
+    model = Transformer(lr=1e-2)
 
     ha_tag = "YPYDVPDYA"
 
@@ -333,7 +344,7 @@ if __name__ == "__main__":
 
     print(model(ha_tag))
 
-    model.fit(dataloader, max_steps=2000, display_count=20)
+    model.fit(dataloader, max_steps=2600, display_count=20)
 
     print(model(ha_tag))
 
