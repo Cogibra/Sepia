@@ -4,7 +4,7 @@ import jax
 
 import numpy as np
 import numpy.random as npr
-aa_keys = "arndcqeghilkmfpstwyvuox"
+aa_keys = "arndcqeghilkmfpstwyvuox".upper()
 NULL_ELEMENT = None
 
 def make_sequence_dict(vocabulary: str, vector_length: int=32, my_seed: int=42) -> dict:
@@ -18,7 +18,7 @@ def make_sequence_dict(vocabulary: str, vector_length: int=32, my_seed: int=42) 
 
     sequence_dict[NULL_ELEMENT] = npr.rand(1, vector_length)
     for element in vocabulary:
-        sequence_dict[element.lower()] = npr.rand(1, vector_length)
+        sequence_dict[element] = npr.rand(1, vector_length)
 
 
     return sequence_dict
@@ -32,7 +32,7 @@ def make_token_dict(vocabulary: str) -> dict:
 
     token_dict[NULL_ELEMENT] = np.array(0).reshape(-1,1)
     for token, element in enumerate(vocabulary):
-        token_dict[element.lower()] = np.array(token + 1).reshape(1,-1)
+        token_dict[element] = np.array(token + 1).reshape(1,-1)
 
     return token_dict
 
@@ -55,10 +55,15 @@ def tokens_to_one_hot(tokens: jnp.array, pad_classes_to: int=None, \
 
     return vmap_to_one_hot(tokens, one_hot)
 
-batch_tokens_to_one_hot = jax.vmap(tokens_to_one_hot, in_axes=(0, None, None))
 
 def compose_batch_tokens_to_one_hot(\
         pad_to: int, pad_classes_to: int) -> type(lambda x: x):
+    """
+    Produices a loop-based batch function for converting integer/index tokens
+    to a one hot encoding. 
+    
+    batch_tokens_to_one_hot = jax.vmap(tokens_to_one_hot, in_axes=(0, None, None))
+    """
 
     one_hot = jnp.zeros((pad_to,  pad_classes_to)) 
     def batch_tokens_to_one_hot(tokens):
@@ -75,9 +80,9 @@ def sequence_to_vectors(sequence: str, sequence_dict: dict, pad_to: int=64) -> j
     for element in sequence:
 
         if vectors is None:
-            vectors = sequence_dict[element.lower()]
+            vectors = sequence_dict[element]
         else:
-            vectors = np.append(vectors, sequence_dict[element.lower()], axis=0)
+            vectors = np.append(vectors, sequence_dict[element], axis=0)
 
     while vectors.shape[0] < pad_to:
         vectors = np.append(vectors, sequence_dict[NULL_ELEMENT], axis=0)
@@ -107,7 +112,7 @@ def one_hot_to_sequence(one_hot: jnp.array, sequence_dict: dict) -> str:
         if index in key_dict.keys():
             sequence += key_dict[index] if index != 0 else ""
         else:
-            print(index)
+            print(index, "key not in dict")
             sequence += "" #key_dict[list(key_dict.keys())[0]]
 
     return sequence

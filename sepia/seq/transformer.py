@@ -24,6 +24,8 @@ from sepia.seq.data import \
         sequence_to_vectors, \
         batch_sequence_to_vectors
 
+from sepia.seq.dataloader import SeqDataLoader
+
 # parameters (namedtuples)
 from sepia.seq.functional import \
         NICEParametersWB, \
@@ -104,6 +106,30 @@ class Transformer():
         self.loss_fn = cross_entropy
 
         self.initialize_model()
+
+    def get_token_dict(self) -> dict:
+
+        return self.token_dict
+
+    def get_seq_length(self) -> int:
+
+        return self.seq_length
+
+    def get_token_dim(self) -> int:
+
+        return self.token_dim
+
+    def set_token_dict(self, new_token_dict: dict):
+
+        self.token_dict = new_token_dict
+
+    def set_seq_length(self, new_seq_length: int):
+
+        self.seq_length = new_seq_length
+
+    def set_token_dim(self, new_token_dim):
+
+        self.token_dim = new_token_dim
 
     def initialize_model(self):
 
@@ -277,18 +303,19 @@ class Transformer():
     def train_step(self, batch: tuple):
 
         # move the next 3 lines functionality to the dataloader
-        tokens = batch_sequence_to_vectors(batch, self.token_dict, \
-                pad_to = self.seq_length)
-        batch_t2oh = compose_batch_tokens_to_one_hot(pad_to = self.seq_length,\
-                pad_classes_to = self.token_dim)
-        one_hot = batch_t2oh(tokens)
+#        tokens = batch_sequence_to_vectors(batch, self.token_dict, \
+#                pad_to = self.seq_length)
+#        batch_t2oh = compose_batch_tokens_to_one_hot(pad_to = self.seq_length,\
+#                pad_classes_to = self.token_dim)
+#        one_hot = batch_t2oh(tokens)
         # move the previous 3 lines functionality to dataloader
 
         # didn't work
         #one_hot = batch_tokens_to_one_hot(tokens, pad_to = self.seq_length,\
         #        pad_classes_to = self.token_dim)
 
-        vector_tokens = batch_bijective_forward(one_hot, self.token_parameters)
+        one_hot = batch
+        vector_tokens = batch_bijective_forward(batch, self.token_parameters)
 
         vector_mask = 1.0 * (npr.rand(*vector_tokens.shape[:-1],1) > self.mask_rate)
 
@@ -331,26 +358,30 @@ class Transformer():
 
 
             if step % display_every == 0 or step == max_steps-1:
-                print(batch[0].lower())
-                print(self(batch[0]))
                 print(f"loss at step {step}:  {cumulative_loss / (batch_index+1.):.3e}")
 
                 
 
 
 if __name__ == "__main__":
+    # ad-hoc test for training transformer
 
     model = Transformer(lr=1e-2)
 
     ha_tag = "YPYDVPDYA"
 
-    dataloader = [[ha_tag, ha_tag, ha_tag]]
+    dataset = [ha_tag, ha_tag, ha_tag]
 
-    print(model(ha_tag))
+    token_dict = model.get_token_dict()
+    seq_length = model.get_seq_length() 
+    token_dim = model.get_token_dim() 
+    dataloader = SeqDataLoader(token_dict, seq_length, token_dim, dataset=dataset)
 
-    model.fit(dataloader, max_steps=2600, display_count=20)
+    print(ha_tag, "\n", model(ha_tag))
 
-    print(model(ha_tag))
+    model.fit(dataloader, max_steps=2000, display_count=20)
+
+    print(ha_tag, "\n", model(ha_tag))
 
     #fit(self, dataloader, **kwargs) -> None:
 
