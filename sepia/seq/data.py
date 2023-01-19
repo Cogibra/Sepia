@@ -40,7 +40,7 @@ def token_to_one_hot(token: jnp.array, one_hot: jnp.array) -> jnp.array:
 
     return one_hot.at[token].set(1.0)
 
-vmap_to_one_hots = jax.vmap(token_to_one_hot)
+vmap_to_one_hot = jax.vmap(token_to_one_hot)
 
 def tokens_to_one_hot(tokens: jnp.array, pad_classes_to: int=None, \
         pad_to: int=None) -> jnp.array:
@@ -51,19 +51,19 @@ def tokens_to_one_hot(tokens: jnp.array, pad_classes_to: int=None, \
         pad_classes_to = jnp.max(tokens)+1
 
     # pre-allocate one-hot array
-    one_hots = jnp.zeros((pad_to, pad_to))
+    one_hot = jnp.zeros((pad_to, pad_classes_to))
 
-    return vmap_to_one_hots(tokens, one_hots)
+    return vmap_to_one_hot(tokens, one_hot)
 
-def compose_batch_tokens_to_one_hots(\
+def compose_batch_tokens_to_one_hot(\
         pad_to: int, pad_classes_to: int) -> type(lambda x: x):
 
-    one_hots = jnp.zeros((pad_to,  pad_classes_to)) 
-    def batch_tokens_to_one_hots(tokens):
+    one_hot = jnp.zeros((pad_to,  pad_classes_to)) 
+    def batch_tokens_to_one_hot(tokens):
 
-        return vmap_to_one_hots(tokens, one_hots)
+        return vmap_to_one_hot(tokens, one_hot)
     
-    return jax.vmap(batch_tokens_to_one_hots)
+    return jax.vmap(batch_tokens_to_one_hot)
 
 
 def sequence_to_vectors(sequence: str, sequence_dict: dict, pad_to: int=256) -> jnp.array:
@@ -81,6 +81,22 @@ def sequence_to_vectors(sequence: str, sequence_dict: dict, pad_to: int=256) -> 
         vectors = np.append(vectors, sequence_dict[NULL_ELEMENT], axis=0)
 
     return vectors
+
+def one_hot_to_sequence(one_hot: jnp.array, sequence_dict: dict) -> str:
+
+    sequence = ""
+
+    key_dict = {sequence_dict[key].item(): key for key in sequence_dict.keys()}
+    for element in one_hot:
+
+        index = jnp.argmax(element).item()
+        if index in key_dict.keys():
+            sequence += key_dict[index]
+        else:
+            print(index)
+            sequence += key_dict[list(key_dict.keys())[0]]
+
+    return sequence
 
 def vectors_to_sequence(sequence_vectors: jnp.array, sequence_dict: dict) -> str:
 

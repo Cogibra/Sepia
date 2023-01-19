@@ -1,5 +1,6 @@
 import argparse
 import os
+import copy
 
 import jax
 from jax import numpy as jnp
@@ -15,6 +16,10 @@ import sepia.optimizer as optimizer
 from sepia.seq.data import \
         aa_keys, \
         make_sequence_dict, \
+        make_token_dict, \
+        tokens_to_one_hot, \
+        compose_batch_tokens_to_one_hot, \
+        one_hot_to_sequence, \
         vectors_to_sequence, \
         sequence_to_vectors
 
@@ -45,6 +50,21 @@ from sepia.seq.data import \
 TransformerParams = namedtuple("TransformerParams", \
         field_names=("token_params", "encoder_params", "decoder_params"))
 
+def cross_entropy(predicted: jnp.array, target: jnp.array) -> float:
+
+    predicted_softmax = jax.nn.softmax(predicted)
+    ce = target * jnp.log(predicted_softmax)\
+
+    return - jnp.mean(ce)
+
+def mae(predicted, target):
+
+    return jnp.mean(jnp.sqrt((predicted - target)**2))
+
+def mse(predicted, target):
+
+    return jnp.mean((predicted - target)**2)
+
 class Transformer():
 
     def __init__(self, **kwargs):
@@ -55,26 +75,30 @@ class Transformer():
 
         # architectural dims and details 
         self.vocab = query_kwargs("vocab", aa_keys, **kwargs)
-        self.token_dim = query_kwargs("token_dim", 48, **kwargs)
+        token_dim = len(self.vocab)
+        if token_dim % 3:
+            token_dim = token_dim + (3-(token_dim % 3))
+        self.token_dim = query_kwargs("token_dim", token_dim, **kwargs)
         self.encoder_dim = self.token_dim * 3
 
         # expose these to user
-        self.seq_length = 32
-        self.encoder_size = query_kwargs("encoder_size", 4, **kwargs)
-        self.decoder_size = query_kwargs("decoder_size", 4, **kwargs)
+        self.seq_length = query_kwargs("seq_length", 10, **kwargs)
+        self.encoder_size = query_kwargs("encoder_size", 1, **kwargs)
+        self.decoder_size = query_kwargs("decoder_size", 1, **kwargs)
         self.hidden_dim = 64
         self.mlp_hidden_dim = 48 
         self.mlp_activation = jax.nn.relu
         self.my_seed = 13
         self.init_scale = 1e-1
-        self.mask_rate = 0.2
-        self.lr = 1e-3
+        self.mask_rate = 0.05
+        self.lr = query_kwargs("lr", 1e-2, **kwargs)
+        self.loss_fn = cross_entropy
 
         self.initialize_model()
 
     def initialize_model(self):
 
-        self.sequence_dict = make_sequence_dict(self.vocab, self.token_dim, my_seed=self.my_seed)
+        self.token_dict = make_token_dict(self.vocab)
         
         # tokenizer
         # tokenizer mlp transforms 1/3 of the vector at a time (NICE)
@@ -159,7 +183,7 @@ class Transformer():
                 self.encoder_stack, \
                 self.decoder_stack)
 
-        self.update = optimizer.adam
+        self.update = optimizer.sgd
         self.update_info = None
 
     def forward(self, x: jnp.array, parameters: tuple) -> jnp.array:
@@ -184,10 +208,7 @@ class Transformer():
 
             decoded = decoder(decoded, encoded, decoder_params)
 
-        output_tokens = bijective_reverse(decoded[0], \
-                token_parameters)
-
-        return output_tokens
+        return decoded
 
     def __call__(self, sequence: str) -> str:
         """
@@ -204,26 +225,40 @@ class Transformer():
         # forward pass
 
         # convert string sequence to numerical vector
-        vector = sequence_to_vectors(sequence, self.sequence_dict, \
+        tokens = sequence_to_vectors(sequence, self.token_dict, \
                 pad_to = self.seq_length)
+
+        one_hot = tokens_to_one_hot(tokens, pad_to = self.seq_length,\
+                pad_classes_to = self.token_dim)
 
         parameters = TransformerParams(self.token_parameters, \
                 self.encoder_stack, \
                 self.decoder_stack)
 
-        input_tokens = bijective_forward(vector, self.token_parameters)[None,:,:]
-        output_tokens = self.forward(input_tokens, parameters)
-        output_sequence = vectors_to_sequence(output_tokens, self.sequence_dict)
+        vector_tokens = bijective_forward(one_hot, self.token_parameters)[None,:,:]
+        decoded = self.forward(one_hot[None,:,:], self.parameters)
+        output_tokens = bijective_reverse(decoded[0], \
+                self.token_parameters)
 
-        # use vmap for multiple sequence at once?
+        output_sequence = one_hot_to_sequence(decoded[0], self.token_dict)
+        print(jnp.argmax(decoded[0], axis=-1))
+        print(jnp.argmax(one_hot, axis=-1))
+
+        # use vmap for multiple sequ/biaseence at once?
 
         return output_sequence
 
     def calc_loss(self, masked_tokens, target, parameters) -> float:
-        
-        predicted_tokens = self.forward(masked_tokens, parameters)
 
-        loss = jnp.mean(jnp.sqrt((predicted_tokens - target)**2))
+        
+        decoded = self.forward(masked_tokens[None,:,:], parameters)
+        predicted_tokens = bijective_reverse(decoded[0], \
+                parameters[0])
+
+#        print("calc_loss decoded, masked")
+#        print(jnp.argmax(decoded[0], axis=-1))
+#        print(jnp.argmax(masked_tokens, axis=-1))
+        loss = self.loss_fn(decoded[0], target)
 
         return loss
 
@@ -231,20 +266,24 @@ class Transformer():
 
         sequence = batch[0]
 
-        vector = sequence_to_vectors(sequence, self.sequence_dict, \
+        tokens = sequence_to_vectors(sequence, self.token_dict, \
                 pad_to = self.seq_length)
+        one_hot = tokens_to_one_hot(tokens, pad_to = self.seq_length,\
+                pad_classes_to = self.token_dim)
 
-        input_tokens = bijective_forward(vector, self.token_parameters)[None,:,:]
+        vector_tokens = bijective_forward(one_hot, self.token_parameters)[None,:,:]
 
-
-        masked_tokens = input_tokens \
-                * (npr.rand(*input_tokens.shape[:2],1) > self.mask_rate)
+        masked_tokens = one_hot #\
+        #        * (npr.rand(*one_hot.shape[0:1],1) > self.mask_rate)
 
         grad_loss = grad(self.calc_loss, argnums=2)
 
         # splitting these roles (returning loss or returning grads) might speed up training
-        loss = self.calc_loss(masked_tokens, input_tokens, self.parameters)
-        my_grad = grad_loss(masked_tokens, input_tokens, self.parameters)
+#        print("train_step masked, one_hot")
+#        print(jnp.argmax(masked_tokens, axis=-1))
+#        print(jnp.argmax(one_hot, axis=-1))
+        loss = self.calc_loss(masked_tokens, one_hot, self.parameters)
+        my_grad = grad_loss(masked_tokens, one_hot, self.parameters)
 
 
         return loss, my_grad
@@ -257,6 +296,8 @@ class Transformer():
         max_steps = query_kwargs("max_steps", 100, **kwargs)
         display_count = query_kwargs("display_count", 2, **kwargs)
         display_every = max_steps // display_count
+
+        #starting_params = copy.deepcopy(self.parameters) 
         
         for step in range(max_steps):
             
@@ -267,13 +308,16 @@ class Transformer():
 
                 cumulative_loss = loss if cumulative_loss is None else cumulative_loss+loss  
 
+                
 
                 self.parameters, self.update_info = optimizer.step(\
                         self.parameters, my_grad, lr=self.lr, \
                         update=self.update, info=self.update_info)
 
 
-            if step % display_every == 0:
+            if step % display_every == 0 or step == max_steps-1:
+                print(batch[0].lower())
+                print(self(batch[0]))
                 print(f"loss at step {step}:  {cumulative_loss / (batch_index+1.):.3e}")
 
                 
@@ -289,7 +333,7 @@ if __name__ == "__main__":
 
     print(model(ha_tag))
 
-    model.fit(dataloader, max_steps=10)
+    model.fit(dataloader, max_steps=2000, display_count=20)
 
     print(model(ha_tag))
 
