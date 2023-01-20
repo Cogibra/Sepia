@@ -41,7 +41,7 @@ def adam(gradient: jnp.array, info: tuple=None) -> tuple:
 
     if info is not None:
         if gradient.shape[0] != info[2].shape[0]:
-            import pdb; pdb.set_trace()
+            assert False, f"gradient shape {gradient.shape} does not match moment shape {info[2].shape}"
         moment = info[0] * info[2] + (1-info[0]) * gradient 
         moment_2 = info[1] * info[3] + (1-info[1]) * gradient**2
         beta_0, beta_1 = info[0], info[1] 
@@ -68,7 +68,6 @@ def step(parameters: namedtuple, gradients: namedtuple, \
         else:
             param_update, info = update(grad, info)
             new_params[parameters._fields[ii]] = param - lr * param_update
-            #print(jnp.sum(new_params[parameters._fields[ii]] - param))
 
     new_parameters = type(parameters)(**new_params)
     

@@ -274,19 +274,11 @@ class Transformer():
 
         vector_tokens = bijective_forward(one_hot, self.token_parameters)[None,:,:]
         #vector_tokens = batch_bijective_forward(one_hot, self.token_parameters)
-        #decoded = self.forward(one_hot[None,:,:], self.parameters)
         decoded = self.forward(vector_tokens, self.parameters)
         output_tokens = bijective_reverse(decoded[0], \
                 self.token_parameters)
 
-        #output_sequence = one_hot_to_sequence(decoded[0], self.token_dict)
         output_sequence = one_hot_to_sequence(output_tokens, self.token_dict)
-#        print(jnp.argmax(decoded[0], axis=-1))
-#        print(jnp.argmax(output_tokens, axis=-1))
-#        print(jnp.argmax(one_hot, axis=-1))
-
-        # use vmap for multiple sequ/biaseence at once?
-
         return output_sequence
 
     def calc_loss(self, masked_tokens, target, parameters) -> float:
@@ -295,26 +287,12 @@ class Transformer():
 
         predicted_tokens = batch_bijective_reverse(decoded, \
                 parameters[0])
-#        predicted_tokens = bijective_reverse(decoded[0], \
-#                parameters[0])
 
         loss = self.loss_fn(predicted_tokens, target)
 
         return loss
 
     def train_step(self, batch: tuple):
-
-        # move the next 3 lines functionality to the dataloader
-#        tokens = batch_sequence_to_vectors(batch, self.token_dict, \
-#                pad_to = self.seq_length)
-#        batch_t2oh = compose_batch_tokens_to_one_hot(pad_to = self.seq_length,\
-#                pad_classes_to = self.token_dim)
-#        one_hot = batch_t2oh(tokens)
-        # move the previous 3 lines functionality to dataloader
-
-        # didn't work
-        #one_hot = batch_tokens_to_one_hot(tokens, pad_to = self.seq_length,\
-        #        pad_classes_to = self.token_dim)
 
         one_hot = batch
         vector_tokens = batch_bijective_forward(batch, self.token_parameters)
@@ -328,7 +306,6 @@ class Transformer():
         # splitting these roles (returning loss or returning grads) might speed up training
         loss = self.calc_loss(masked_tokens, one_hot, self.parameters)
         my_grad = grad_loss(masked_tokens, one_hot, self.parameters)
-
 
         return loss, my_grad
 
@@ -345,8 +322,6 @@ class Transformer():
 
         val_dataloader = query_kwargs("val_dataloader", None, **kwargs)
 
-        #starting_params = copy.deepcopy(self.parameters) 
-        
         for epoch in range(max_epochs):
             
             cumulative_loss = None
@@ -408,6 +383,3 @@ if __name__ == "__main__":
     model.fit(dataloader, max_epochs=200, display_count=20, save_count=2)
 
     print(ha_tag, "\n", model(ha_tag))
-
-    #fit(self, dataloader, **kwargs) -> None:
-
