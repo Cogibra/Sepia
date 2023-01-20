@@ -64,9 +64,9 @@ class SeqDataLoader():
         self.my_seed = query_kwargs("seed", 13, **kwargs)
 
         if "dataset" in kwargs.keys():
-            self.load_dataset(kwargs["dataset"])
+            self.setup_dataset(kwargs["dataset"])
 
-    def load_dataset(self, dataset: np.array):
+    def setup_dataset(self, dataset: np.array):
         # shape dataset and convert to one hot vectors
         # dataset is expected to be a 1D array of string sequences
 
@@ -97,6 +97,42 @@ class SeqDataLoader():
 
         self.dataset = one_hot_dataset.reshape(-1, self.batch_size, \
                 self.seq_length, self.token_dim)
+
+    def set_dataset(self, dataset: jnp.array):
+
+        remainder = dataset.shape[1] % self.batch_size
+
+        while remainder:
+
+            if remainder:
+                append_index = self.batch_size - remainder
+                dataset = np.append(dataset, dataset[0:append_index], axis=0)
+
+            remainder = dataset.shape[0] % self.batch_size
+
+
+        assert self.seq_length == dataset.shape[-2], f"seq_length {self.seq_length} != {dataset.shape[-2]}"
+        assert self.token_dim == dataset.shape[-1], f"token_dim {self.token_dim} != {dataset.shape[-1]}"
+
+        self.dataset = dataset.reshape(-1, self.batch_size, \
+                self.seq_length, self.token_dim)
+
+    def save_dataset(self, filepath: str=None):
+
+        if filepath is None:
+            filepath = os.path.join("data", "temp.npy")
+
+        jnp.save(filepath, self.dataset)
+
+    def load_dataset(self, filepath: str=None):
+
+        if filepath is None:
+            filepath = os.path.join("data", "temp.npy")
+
+        if os.path.exists(filepath):
+            self.set_dataset(jnp.load(filepath))
+        else:
+            print(f"warning, {filepath} does not exist")
 
     def __len__(self) -> int:
 
