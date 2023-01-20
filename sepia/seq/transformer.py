@@ -337,17 +337,17 @@ class Transformer():
 
         # dataloader is an iterable that returns batches
 
-        max_steps = query_kwargs("max_steps", 100, **kwargs)
+        max_epochs = query_kwargs("max_epochs", 100, **kwargs)
         display_count = query_kwargs("display_count", 2, **kwargs)
         save_count = query_kwargs("save_count", 0, **kwargs)
-        save_every = max_steps // max([1, save_count])
-        display_every = max_steps // max([1, display_count])
+        save_every = max_epochs // max([1, save_count])
+        display_every = max_epochs // max([1, display_count])
 
         val_dataloader = query_kwargs("val_dataloader", None, **kwargs)
 
         #starting_params = copy.deepcopy(self.parameters) 
         
-        for step in range(max_steps):
+        for epoch in range(max_epochs):
             
             cumulative_loss = None
             for batch_index, batch in enumerate(dataloader):
@@ -363,13 +363,16 @@ class Transformer():
                         update=self.update, info=self.update_info)
 
 
-            if (display_count and step % display_every == 0) or step == max_steps-1:
+            if (display_count and epoch % display_every == 0) or epoch == max_epochs-1:
                 if val_dataloader is not None:
                     pass
-                print(f"loss at step {step}:  {cumulative_loss / (batch_index+1.):.3e}")
-            if step % save_every == 0 and save_count:
-                checkpoint_path = os.path.join("parameters", f"temp_step{step}.npy") 
-                print(f"saving checkpoint at step {step} to {checkpoint_path}")
+                print(f"loss at epoch {epoch}:  {cumulative_loss / (batch_index+1.):.3e}")
+            if (epoch % save_every == 0 or epoch == max_epochs-1) and save_count:
+                checkpoint_path = os.path.join("parameters", f"temp_epoch{epoch}.npy") 
+                print(f"saving checkpoint at epoch {epoch} to {checkpoint_path}")
+                jnp.save(checkpoint_path, get_parameters(self.parameters))
+                checkpoint_path = os.path.join("parameters", f"temp_epoch{epoch}.npy") 
+                print(f"saving checkpoint at epoch {epoch} to {checkpoint_path}")
                 jnp.save(checkpoint_path, get_parameters(self.parameters))
     
     def restore_parameters(self, np_parameters: jnp.array):
@@ -402,7 +405,7 @@ if __name__ == "__main__":
 
     print(ha_tag, "\n", model(ha_tag))
 
-    model.fit(dataloader, max_steps=200, display_count=20, save_count=2)
+    model.fit(dataloader, max_epochs=200, display_count=20, save_count=2)
 
     print(ha_tag, "\n", model(ha_tag))
 

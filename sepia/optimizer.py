@@ -63,7 +63,7 @@ def step(parameters: namedtuple, gradients: namedtuple, \
     for ii, (param, grad) in enumerate(zip(parameters, gradients)):
         
         # indirect workaround for testing whether the param is a namedtuple
-        if dir(param)[35] == "_fields":
+        if "_field" in dir(param)[35]:
             new_params[parameters._fields[ii]] = step(param, grad, lr, update, info)[0]
         else:
             param_update, info = update(grad, info)
