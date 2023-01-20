@@ -270,6 +270,12 @@ def get_parameters(parameters: namedtuple) -> jnp.array:
 
 def set_parameters(np_parameters: jnp.array, parameters: namedtuple) -> namedtuple:
 
+    np_shape = np_parameters.shape
+    p_shape = get_parameters(parameters).shape
+    exception_message = f"numpy array shape {np_shape} and parameter shape {p_shape} don't match"
+
+    assert np_shape == p_shape, exception_message
+
     param_start = 0
     new_params = {}
     for ii, param in enumerate(parameters):
