@@ -7,6 +7,7 @@ from sepia.test.graph.test_functional import TestGraphConv
 from sepia.test.seq.test_functional import TestNICE,\
         TestSelfAttention,\
         TestEncoder,\
+        TestGetSetParameters,\
         TestDecoder
 from sepia.test.seq.test_transformer import TestTransformer
 

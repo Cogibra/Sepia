@@ -42,4 +42,4 @@ class TestTransformer(unittest.TestCase):
 
         dataloader = SeqDataLoader(token_dict, seq_length, token_dim, dataset=dataset, batch_size=1)
 
-        model.fit(dataloader, max_steps=2)
+        model.fit(dataloader, max_epochs=2)
