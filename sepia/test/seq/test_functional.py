@@ -19,7 +19,46 @@ from sepia.seq.functional import \
         encoder, \
         decoder, \
         bijective_forward, \
-        bijective_reverse
+        bijective_reverse, \
+        get_parameters, \
+        set_parameters
+
+from sepia.seq.transformer import Transformer
+
+class TestGetSetParameters(unittest.TestCase):
+
+    def setUp(self):
+
+        self.model = Transformer()
+
+    def test_get_parameters(self):
+
+        np_parameters_00 = get_parameters(self.model.parameters)
+
+        self.model.initialize_model()
+
+        np_parameters_10 = get_parameters(self.model.parameters)
+
+        self.model.parameters = set_parameters(np_parameters_00, self.model.parameters)
+
+        np_parameters_01 = get_parameters(self.model.parameters) 
+
+        self.model.parameters = set_parameters(np_parameters_10, self.model.parameters)
+
+        np_parameters_11 = get_parameters(self.model.parameters) 
+
+        # sad: sum of absolute difference
+        sad_00_10 = jnp.sum(jnp.abs(np_parameters_00 - np_parameters_10))
+        sad_01_11 = jnp.sum(jnp.abs(np_parameters_01 - np_parameters_11))
+
+        sad_00_01 = jnp.sum(jnp.abs(np_parameters_00 - np_parameters_01))
+        sad_10_11 = jnp.sum(jnp.abs(np_parameters_10 - np_parameters_11))
+
+        self.assertEqual(0.0, sad_00_01)
+        self.assertEqual(0.0, sad_10_11)
+        
+        self.assertNotEqual(0.0, sad_00_10)
+        self.assertNotEqual(0.0, sad_01_11)
 
 class TestSelfAttention(unittest.TestCase):
     
@@ -35,16 +74,6 @@ class TestSelfAttention(unittest.TestCase):
         attention = self_attention(self.x, self.parameters)
 
         self.assertEqual(self.x.shape, attention.shape)
-"""
-EncodedAttentionW = namedtuple("EncodedAttentionW", \
-        field_names=("self_weights", "encoded_weights")) 
-EncoderParams = namedtuple("EncoderParams", \
-        field_names=("attention_weights", "mlp_params"))
-DecoderParams = namedtuple("DecoderParams", \
-        field_names=("encoded_attention", "mlp_params"))
-MLPParams = namedtuple("MLPParams", \
-        field_names=("mlp_weights", "mlp_biases", "activation"))
-"""
 
 class TestDecoder(unittest.TestCase):
 
@@ -155,4 +184,4 @@ class TestNICE(unittest.TestCase):
 
 if __name__ == "__main__":
 
-    unittest.main(verbosity=1)
+    unittest.main(verbosity=2)

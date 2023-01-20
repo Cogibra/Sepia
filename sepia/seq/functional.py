@@ -1,3 +1,5 @@
+from functools import reduce
+
 import jax
 from jax import numpy as jnp
 from jax import grad
@@ -7,7 +9,7 @@ import numpy.random as npr
 from collections import namedtuple
 
 from sepia.seq.data import \
-        get_sequence_dict, \
+        make_sequence_dict, \
         vectors_to_sequence, \
         sequence_to_vectors
 
@@ -181,6 +183,8 @@ def bijective_forward(sequence_vectors: jnp.array, \
     
     return tokens
 
+batch_bijective_forward = jax.vmap(bijective_forward, in_axes=(0,None))
+
 def bijective_reverse(sequence_features: jnp.array, \
         parameters: NICEParametersWB) -> jnp.array:
     """
@@ -241,3 +245,56 @@ def bijective_reverse(sequence_features: jnp.array, \
     sequence_vectors = jnp.append(u_12, u_22, axis=-1)
 
     return sequence_vectors
+
+batch_bijective_reverse = jax.vmap(bijective_reverse, in_axes=(0,None))
+
+def get_parameters(parameters: namedtuple) -> jnp.array:
+
+    np_parameters = None
+
+    for ii, param in enumerate(parameters):
+        
+        # indirect workaround for testing whether the param is a namedtuple
+        if "_field" in dir(param)[35]:
+            np_param = get_parameters(param)
+        else:
+            np_param = param
+
+        np_param = np_param.reshape(-1)
+        if np_parameters is None:
+            np_parameters = np_param
+        else:
+            np_parameters = jnp.append(np_parameters, np_param)
+
+    return np_parameters
+
+def set_parameters(np_parameters: jnp.array, parameters: namedtuple) -> namedtuple:
+
+    np_shape = np_parameters.shape
+    p_shape = get_parameters(parameters).shape
+    exception_message = f"numpy array shape {np_shape} and parameter shape {p_shape} don't match"
+
+    assert np_shape == p_shape, exception_message
+
+    param_start = 0
+    new_params = {}
+    for ii, param in enumerate(parameters):
+        # indirect workaround for testing whether the param is a namedtuple
+        if "_field" in dir(param)[35]:
+            temp_np_param = get_parameters(param)
+            param_stop = param_start + temp_np_param.shape[0]
+            np_param = np_parameters[param_start:param_stop]
+            new_params[parameters._fields[ii]] = set_parameters(np_param, param)
+
+        else:
+            param_stop = param_start + reduce(lambda a,b: a*b, param.shape)
+            np_param = np_parameters[param_start:param_stop].reshape(param.shape)
+            new_params[parameters._fields[ii]] = np_param
+
+        param_start = param_stop
+
+    new_parameters = type(parameters)(**new_params)
+
+    return new_parameters
+
+

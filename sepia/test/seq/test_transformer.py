@@ -22,6 +22,8 @@ from sepia.seq.functional import \
         bijective_forward, \
         bijective_reverse
 
+from sepia.seq.dataloader import SeqDataLoader
+
 class TestTransformer(unittest.TestCase):
 
     def setUp(self):
@@ -32,6 +34,12 @@ class TestTransformer(unittest.TestCase):
 
         ha_tag = "YPYDVPDYA"
 
-        dataloader = [[ha_tag]]
+        dataset = [ha_tag]
 
-        model.fit(dataloader, max_steps=2)
+        token_dict = model.get_token_dict()
+        seq_length = model.get_seq_length()
+        token_dim = model.get_token_dim()
+
+        dataloader = SeqDataLoader(token_dict, seq_length, token_dim, dataset=dataset, batch_size=1)
+
+        model.fit(dataloader, max_epochs=2)
