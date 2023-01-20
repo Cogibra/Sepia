@@ -36,6 +36,8 @@ from sepia.seq.functional import \
         EncoderParams, \
         DecoderParams, \
         make_layers_tuple, \
+        get_parameters,\
+        set_parameters,\
         MLPParams 
 
 # functions
@@ -94,8 +96,8 @@ class Transformer():
 
         # expose these to user
         self.seq_length = query_kwargs("seq_length", 10, **kwargs)
-        self.encoder_size = query_kwargs("encoder_size", 1, **kwargs)
-        self.decoder_size = query_kwargs("decoder_size", 1, **kwargs)
+        self.encoder_size = query_kwargs("encoder_size", 4, **kwargs)
+        self.decoder_size = query_kwargs("decoder_size", 4, **kwargs)
         self.hidden_dim = 64
         self.mlp_hidden_dim = 48 
         self.mlp_activation = jax.nn.relu
@@ -337,7 +339,11 @@ class Transformer():
 
         max_steps = query_kwargs("max_steps", 100, **kwargs)
         display_count = query_kwargs("display_count", 2, **kwargs)
-        display_every = max_steps // display_count
+        save_count = query_kwargs("save_count", 0, **kwargs)
+        save_every = max_steps // max([1, save_count])
+        display_every = max_steps // max([1, display_count])
+
+        val_dataloader = query_kwargs("val_dataloader", None, **kwargs)
 
         #starting_params = copy.deepcopy(self.parameters) 
         
@@ -357,8 +363,25 @@ class Transformer():
                         update=self.update, info=self.update_info)
 
 
-            if step % display_every == 0 or step == max_steps-1:
+            if (display_count and step % display_every == 0) or step == max_steps-1:
+                if val_dataloader is not None:
+                    pass
                 print(f"loss at step {step}:  {cumulative_loss / (batch_index+1.):.3e}")
+            if step % save_every == 0 and save_count:
+                checkpoint_path = os.path.join("parameters", f"temp_step{step}.npy") 
+                print(f"saving checkpoint at step {step} to {checkpoint_path}")
+                jnp.save(checkpoint_path, get_parameters(self.parameters))
+    
+    def restore_parameters(self, np_parameters: jnp.array):
+
+        self.parameters = set_parameters(np_parameters, self.parameters)
+
+    def load_parameters(self, filepath: str):
+
+        np_parameters = jnp.load(filepath)
+        self.restore_parameters(np_parameters)
+
+
 
                 
 
@@ -379,7 +402,7 @@ if __name__ == "__main__":
 
     print(ha_tag, "\n", model(ha_tag))
 
-    model.fit(dataloader, max_steps=2000, display_count=20)
+    model.fit(dataloader, max_steps=200, display_count=20, save_count=2)
 
     print(ha_tag, "\n", model(ha_tag))
 
