@@ -10,6 +10,6 @@ sepia/seq/__init__.py           0      0   100%
 sepia/seq/data.py              78     36    54%
 sepia/seq/dataloader.py        67     23    66%
 sepia/seq/functional.py       124      0   100%
-sepia/seq/transformer.py      173     32    82%
+sepia/seq/transformer.py      172     31    82%
 -----------------------------------------------
-TOTAL                         523    126    76%
+TOTAL                         522    125    76%

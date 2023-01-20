@@ -141,7 +141,7 @@ class Transformer():
         # tokenizer mlp transforms 1/3 of the vector at a time (NICE)
         tokenizer_weight_dim = self.token_dim // 3
         token_weights = npr.randn(3, tokenizer_weight_dim, tokenizer_weight_dim*2)
-        self.token_parameters = NICEParametersW(weights=token_weights)
+        token_parameters = NICEParametersW(weights=token_weights)
 
         # encoder stack
         encoder_stack = []
@@ -172,7 +172,7 @@ class Transformer():
                     mlp_params = mlp_params)
 
             encoder_stack.append(encoder_parameters)
-        self.encoder_stack = EncoderStack(*encoder_stack)
+        encoder_stack = EncoderStack(*encoder_stack)
 
 
         # decoder stack
@@ -214,11 +214,11 @@ class Transformer():
 
             decoder_stack.append(decoder_parameters)
 
-        self.decoder_stack = DecoderStack(*decoder_stack)
+        decoder_stack = DecoderStack(*decoder_stack)
 
-        self.parameters = TransformerParams(self.token_parameters, \
-                self.encoder_stack, \
-                self.decoder_stack)
+        self.parameters = TransformerParams(token_parameters, \
+                encoder_stack, \
+                decoder_stack)
 
         self.update = optimizer.sgd
         self.update_info = None
@@ -239,7 +239,7 @@ class Transformer():
 
             encoded = encoder(encoded, encoder_params)
 
-        # encoder stack: list of encoder parameters
+        # decoder stack: list of encoder parameters
         decoded = 1.0 * encoded
         for decoder_params in decoder_stack:
 
@@ -268,15 +268,11 @@ class Transformer():
         one_hot = tokens_to_one_hot(tokens, pad_to = self.seq_length,\
                 pad_classes_to = self.token_dim)
 
-        parameters = TransformerParams(self.token_parameters, \
-                self.encoder_stack, \
-                self.decoder_stack)
-
-        vector_tokens = bijective_forward(one_hot, self.token_parameters)[None,:,:]
-        #vector_tokens = batch_bijective_forward(one_hot, self.token_parameters)
+        vector_tokens = bijective_forward(one_hot, self.parameters[0])[None,:,:]
+        #vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])
         decoded = self.forward(vector_tokens, self.parameters)
         output_tokens = bijective_reverse(decoded[0], \
-                self.token_parameters)
+                self.parameters[0])
 
         output_sequence = one_hot_to_sequence(output_tokens, self.token_dict)
         return output_sequence
@@ -295,7 +291,7 @@ class Transformer():
     def train_step(self, batch: tuple):
 
         one_hot = batch
-        vector_tokens = batch_bijective_forward(batch, self.token_parameters)
+        vector_tokens = batch_bijective_forward(batch, self.parameters[0])
 
         vector_mask = 1.0 * (npr.rand(*vector_tokens.shape[:-1],1) > self.mask_rate)
 
