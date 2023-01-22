@@ -5,11 +5,11 @@ sepia/common.py                 4      0   100%
 sepia/graph/__init__.py         0      0   100%
 sepia/graph/data.py            13      7    46%
 sepia/graph/functional.py      26     17    35%
-sepia/optimizer.py             31     11    65%
+sepia/optimizer.py             35      2    94%
 sepia/seq/__init__.py           0      0   100%
-sepia/seq/data.py              78     36    54%
+sepia/seq/data.py              78     32    59%
 sepia/seq/dataloader.py        67     23    66%
 sepia/seq/functional.py       124      0   100%
-sepia/seq/transformer.py      172     31    82%
+sepia/seq/transformer.py      194     32    84%
 -----------------------------------------------
-TOTAL                         522    125    76%
+TOTAL                         548    113    79%
