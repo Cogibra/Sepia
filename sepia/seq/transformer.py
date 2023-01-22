@@ -160,7 +160,7 @@ class Transformer():
 
         # encoder stack
         encoder_stack = []
-        EncoderStack = make_layers_tuple(depth=self.decoder_size, name="decoder")
+        EncoderStack = make_layers_tuple(depth=self.encoder_size, name="decoder")
         for ii in range(self.encoder_size): 
             weights = glorot(self.token_dim, self.encoder_dim)
             attention_weights = SelfAttentionW(weights = weights)
