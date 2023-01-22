@@ -57,12 +57,14 @@ from sepia.seq.data import \
 TransformerParams = namedtuple("TransformerParams", \
         field_names=("token_params", "encoder_params", "decoder_params"))
 
-def cross_entropy(predicted: jnp.array, target: jnp.array, ignore_index: int=0) -> float:
+def cross_entropy(predicted: jnp.array, target: jnp.array, ignore_index: int=None) -> float:
 
     predicted_softmax = jax.nn.softmax(predicted)
 
     if ignore_index is not None:
         dont_ignore = 1.0 * (jnp.argmax(target) != ignore_index)
+    else: 
+        dont_ignore = 1.0
 
     ce = target * jnp.log(predicted_softmax) * dont_ignore
 
@@ -77,6 +79,19 @@ def mae(predicted, target):
 def mse(predicted, target):
 
     return jnp.mean((predicted - target)**2)
+
+def glorot(*args):
+
+    if len(args) > 1:
+        dim_in = args[-2]
+    else:
+        dim_in = args[-1]
+    dim_out = args[-1]
+
+    std_dev = jnp.sqrt(2 / (dim_in + dim_out))
+
+    return npr.randn(*args) * std_dev
+
 
 class Transformer():
 
@@ -102,7 +117,7 @@ class Transformer():
         self.mlp_hidden_dim = 48 
         self.mlp_activation = jax.nn.relu
         self.my_seed = 13
-        self.init_scale = 1e-1
+        self.init_scale = 1
         self.mask_rate = 0.05
         self.lr = query_kwargs("lr", 3e-3, **kwargs)
         self.loss_fn = cross_entropy
@@ -140,23 +155,23 @@ class Transformer():
         # tokenizer
         # tokenizer mlp transforms 1/3 of the vector at a time (NICE)
         tokenizer_weight_dim = self.token_dim // 3
-        token_weights = npr.randn(3, tokenizer_weight_dim, tokenizer_weight_dim*2)
+        token_weights = glorot(3, tokenizer_weight_dim, tokenizer_weight_dim*2)
         token_parameters = NICEParametersW(weights=token_weights)
 
         # encoder stack
         encoder_stack = []
         EncoderStack = make_layers_tuple(depth=self.decoder_size, name="decoder")
         for ii in range(self.encoder_size): 
-            weights = npr.randn(self.token_dim, self.encoder_dim)*self.init_scale
+            weights = glorot(self.token_dim, self.encoder_dim)
             attention_weights = SelfAttentionW(weights = weights)
 
-            mlp_weights = [npr.randn(self.token_dim, self.mlp_hidden_dim)*self.init_scale, \
-                    npr.randn(self.mlp_hidden_dim, self.mlp_hidden_dim)*self.init_scale, \
-                    npr.randn(self.mlp_hidden_dim, self.token_dim)*self.init_scale]
+            mlp_weights = [glorot(self.token_dim, self.mlp_hidden_dim), \
+                    glorot(self.mlp_hidden_dim, self.mlp_hidden_dim), \
+                    glorot(self.mlp_hidden_dim, self.token_dim)]
 
-            mlp_biases = [npr.randn(self.mlp_hidden_dim,)*self.init_scale, \
-                    npr.randn(self.mlp_hidden_dim,)*self.init_scale, \
-                    npr.randn(self.token_dim,)*self.init_scale]
+            mlp_biases = [glorot(self.mlp_hidden_dim), \
+                    glorot(self.mlp_hidden_dim), \
+                    glorot(self.token_dim)]
 
             mlp_weights_tuple = make_layers_tuple(depth=len(mlp_weights), name="weights")
             mlp_biases_tuple = make_layers_tuple(depth=len(mlp_biases), name="biases")
@@ -179,13 +194,13 @@ class Transformer():
         decoder_stack = []
         DecoderStack = make_layers_tuple(depth=self.decoder_size, name="decoder")
         for ii in range(self.decoder_size): 
-            mlp_weights = [npr.randn(self.token_dim, self.mlp_hidden_dim)*self.init_scale, \
-                    npr.randn(self.mlp_hidden_dim, self.mlp_hidden_dim)*self.init_scale, \
-                    npr.randn(self.mlp_hidden_dim, self.token_dim)*self.init_scale]
+            mlp_weights = [glorot(self.token_dim, self.mlp_hidden_dim), \
+                    glorot(self.mlp_hidden_dim, self.mlp_hidden_dim), \
+                    glorot(self.mlp_hidden_dim, self.token_dim)]
 
-            mlp_biases = [npr.randn(self.mlp_hidden_dim,)*self.init_scale, \
-                    npr.randn(self.mlp_hidden_dim,)*self.init_scale, \
-                    npr.randn(self.token_dim,)*self.init_scale]
+            mlp_biases = [glorot(self.mlp_hidden_dim), \
+                    glorot(self.mlp_hidden_dim), \
+                    glorot(self.token_dim)]
 
             mlp_weights_tuple = make_layers_tuple(depth=len(mlp_weights), name="weights")
             mlp_biases_tuple = make_layers_tuple(depth=len(mlp_biases), name="biases")
@@ -197,11 +212,11 @@ class Transformer():
                     mlp_biases=mlp_biases)
 
             # decoder self-attention
-            weights_a = npr.randn(self.token_dim, self.encoder_dim)*self.init_scale
+            weights_a = glorot(self.token_dim, self.encoder_dim)
             self_attention_weights = SelfAttentionW(weights = weights_a)
 
             # encoder-decoder attention
-            weights_b = npr.randn(self.token_dim, self.encoder_dim)*self.init_scale
+            weights_b = glorot(self.token_dim, self.encoder_dim)
             encoded_weights = SelfAttentionW(weights = weights_b)
 
             attention_weights = EncodedAttentionW(\
@@ -220,7 +235,7 @@ class Transformer():
                 encoder_stack, \
                 decoder_stack)
 
-        self.update = optimizer.sgd
+        self.update = optimizer.adam
         self.update_info = None
 
     def forward(self, x: jnp.array, parameters: tuple) -> jnp.array:
@@ -234,7 +249,7 @@ class Transformer():
         decoder_stack = parameters[2]
         
         # encoder stack: list of encoder parameters
-        encoded = x #tokens
+        encoded = x 
         for encoder_params in encoder_stack:
 
             encoded = encoder(encoded, encoder_params)
@@ -271,8 +286,7 @@ class Transformer():
         vector_tokens = bijective_forward(one_hot, self.parameters[0])[None,:,:]
         #vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])
         decoded = self.forward(vector_tokens, self.parameters)
-        output_tokens = bijective_reverse(decoded[0], \
-                self.parameters[0])
+        output_tokens = bijective_reverse(decoded[0], self.parameters[0])
 
         output_sequence = one_hot_to_sequence(output_tokens, self.token_dict)
         return output_sequence
@@ -281,8 +295,7 @@ class Transformer():
 
         decoded = self.forward(masked_tokens, parameters)
 
-        predicted_tokens = batch_bijective_reverse(decoded, \
-                parameters[0])
+        predicted_tokens = batch_bijective_reverse(decoded, parameters[0])
 
         loss = self.loss_fn(predicted_tokens, target)
 
@@ -291,11 +304,11 @@ class Transformer():
     def train_step(self, batch: tuple):
 
         one_hot = batch
-        vector_tokens = batch_bijective_forward(batch, self.parameters[0])
+        vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])
 
         vector_mask = 1.0 * (npr.rand(*vector_tokens.shape[:-1],1) > self.mask_rate)
 
-        masked_tokens = vector_tokens * vector_mask \
+        masked_tokens = vector_tokens * vector_mask 
 
         grad_loss = grad(self.calc_loss, argnums=2)
 

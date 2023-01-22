@@ -39,18 +39,17 @@ def adam(gradient: jnp.array, info: tuple=None) -> tuple:
         moment_2: second moment (exponential average of gradient^2
     """
 
+    beta_0, beta_1 = 1e-3, 1e-4
     if info is not None:
-        if gradient.shape[0] != info[2].shape[0]:
+        if gradient.shape[0] != info[1].shape[0]:
             assert False, f"gradient shape {gradient.shape} does not match moment shape {info[2].shape}"
-        moment = info[0] * info[2] + (1-info[0]) * gradient 
-        moment_2 = info[1] * info[3] + (1-info[1]) * gradient**2
-        beta_0, beta_1 = info[0], info[1] 
+        moment = beta_0 * info[1] + (1-beta_0) * gradient 
+        moment_2 = beta_1 * info[2] + (1-beta_1) * gradient**2
     else:
-        beta_0, beta_1 = 1e-3, 1e-4
         moment = gradient
         moment_2 = gradient**2
 
-    info = (beta_0, beta_1, moment, moment_2)
+    info = jnp.append(moment[None,...], moment_2[None,...], axis=0)
 
     return (gradient, info)
 
@@ -60,16 +59,22 @@ def step(parameters: namedtuple, gradients: namedtuple, \
     new_parameters = []
 
     new_params = {}
-    for ii, (param, grad) in enumerate(zip(parameters, gradients)):
+    info_params = {}
+    if info is None:
+        info = [None] * len(parameters)
+    for ii, (param, grad, my_info) in enumerate(zip(parameters, gradients, info)):
         
         # indirect workaround for testing whether the param is a namedtuple
         if "_field" in dir(param)[35]:
-            new_params[parameters._fields[ii]] = step(param, grad, lr, update, info)[0]
+            new_params[parameters._fields[ii]], \
+                    info_params[parameters._fields[ii]] = \
+                    step(param, grad, lr, update, my_info)
         else:
-            param_update, info = update(grad, info)
+            param_update, new_info = update(grad, my_info)
             new_params[parameters._fields[ii]] = param - lr * param_update
+            info_params[parameters._fields[ii]] = new_info
 
     new_parameters = type(parameters)(**new_params)
-    
+    new_info = type(parameters)(**info_params)
 
-    return new_parameters, info
+    return new_parameters, new_info
