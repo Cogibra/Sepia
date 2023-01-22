@@ -261,6 +261,38 @@ class Transformer():
             decoded = decoder(decoded, encoded, decoder_params)
 
         return decoded
+    
+    def forward_encode(self, x: jnp.array, parameters: tuple) -> jnp.array:
+        """
+        called after converting string sequences to vectors 
+        """
+
+        token_parameters = parameters[0]
+        encoder_stack = parameters[1]
+        decoder_stack = parameters[2]
+        
+        # encoder stack: list of encoder parameters
+        encoded = x 
+        for encoder_params in encoder_stack:
+
+            encoded = encoder(encoded, encoder_params)
+
+        return encoded
+    
+    def encode(self, sequence: str) -> jnp.array:
+        # convert string sequence to numerical vector
+        tokens = sequence_to_vectors(sequence, self.token_dict, \
+                pad_to = self.seq_length)
+
+        one_hot = tokens_to_one_hot(tokens, pad_to = self.seq_length,\
+                pad_classes_to = self.token_dim)
+
+        vector_tokens = bijective_forward(one_hot, self.parameters[0])[None,:,:]
+        #vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])
+        encoded = self.forward_encode(vector_tokens, self.parameters)
+
+        return encoded
+
 
     def __call__(self, sequence: str) -> str:
         """
