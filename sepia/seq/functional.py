@@ -71,11 +71,12 @@ def self_attention(x: jnp.array, parameters: SelfAttentionW) -> jnp.array:
     query = key_query_value[:,:,kqv_split:2*kqv_split]
     value = key_query_value[:,:,2*kqv_split:3*kqv_split]
 
-    raw_attention = batch_seq_dot(key, query)[:,:,None]
+    dim_k = query.shape[-1]
+    raw_attention = jnp.matmul(query, key.transpose(0,2,1)) / jnp.sqrt(dim_k)
 
     attention = jax.nn.softmax(raw_attention, axis=0)
 
-    output = attention * value
+    output = jnp.matmul(attention, value)
     
     return output
 
