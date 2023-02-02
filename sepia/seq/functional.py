@@ -83,6 +83,14 @@ def self_attention(x: jnp.array, parameters: SelfAttentionW) -> jnp.array:
 def encoder(x: jnp.array, parameters: EncoderParams) -> jnp.array:
 
     attention = self_attention(x, parameters.attention_weights)
+    attention_residual = x + attention
+
+    # batch by sequence length by token dim
+    gain = 1.0
+    standard_deviation = jnp.std(attention_residual, axis=(-2,-1), keepdims=True)
+    layer_mean = jnp.mean(attention_residual, axis=(-2,-1), keepdims=True)
+
+    normed_activations = (attention_residual - layer_mean) * (gain / standard_deviation)
 
     output = mlp(attention, parameters.mlp_params)
         
