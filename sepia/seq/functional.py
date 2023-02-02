@@ -88,13 +88,19 @@ def encoder(x: jnp.array, parameters: EncoderParams) -> jnp.array:
     # batch by sequence length by token dim
     gain = 1.0
     standard_deviation = jnp.std(attention_residual, axis=(-2,-1), keepdims=True)
-    layer_mean = jnp.mean(attention_residual, axis=(-2,-1), keepdims=True)
+    attention_mean = jnp.mean(attention_residual, axis=(-2,-1), keepdims=True)
 
-    normed_activations = (attention_residual - layer_mean) * (gain / standard_deviation)
+    normed_attention = (attention_residual - attention_mean) * (gain / standard_deviation)
 
-    output = mlp(attention, parameters.mlp_params)
-        
-    return output
+    output = mlp(normed_attention, parameters.mlp_params)
+    output_residual = normed_attention + output
+       
+    output_standard_deviation = jnp.std(output_residual, axis=(-2,-1), keepdims=True)
+    output_mean = jnp.mean(output_residual, axis=(-2,-1), keepdims=True)
+
+    normed_output = (output_residual - output_mean) * (gain / output_standard_deviation)
+
+    return normed_output
 
 def encoded_attention(x: jnp.array, encoded: jnp.array, parameters: EncodedAttentionW) -> jnp.array:
     # EncDecAttentionW = namedtuple("EncDecAttention", \
