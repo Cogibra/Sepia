@@ -7,12 +7,14 @@ from jax import numpy as jnp
 from jax import grad
 
 import numpy.random as npr
+import numpy as np
 
 from collections import namedtuple
 
 from sepia.common import query_kwargs
 import sepia.optimizer as optimizer
 
+import sepia
 from sepia.seq.data import \
         aa_keys, \
         make_sequence_dict, \
@@ -68,9 +70,25 @@ def cross_entropy(predicted: jnp.array, target: jnp.array, ignore_index: int=Non
 
     ce = target * jnp.log(predicted_softmax) * dont_ignore
 
-    assert jnp.mean(ce) <= 0.0, f"c. entropy negative {-jnp.mean(ce)}\n targets: {target.max()}\n pred {predicted_softmax.max()}"
+    assert jnp.sum(ce) <= 0.0, f"c. entropy negative {-jnp.mean(ce)}\n targets: {target.max()}\n pred {predicted_softmax.max()}"
 
-    return - jnp.mean(ce)
+    return - jnp.sum(ce)
+
+def nll_logits_loss(predicted: jnp.array, target: jnp.array, ignore_index: int=None) -> float:
+
+    predicted_softmax = jax.nn.softmax(predicted)
+
+    if ignore_index is not None:
+        dont_ignore = 1.0 * (jnp.argmax(target) != ignore_index)
+    else: 
+        dont_ignore = 1.0
+
+    nll = (target * jnp.log(predicted_softmax) \
+            + (1-target)*jnp.log(1-predicted_softmax) ) * dont_ignore
+
+    assert jnp.mean(nll) <= 0.0, f"c. entropy negative {-jnp.mean(ce)}\n targets: {target.max()}\n pred {predicted_softmax.max()}"
+
+    return - jnp.mean(nll)
 
 def mae(predicted, target):
 
@@ -118,9 +136,9 @@ class Transformer():
         self.mlp_activation = jax.nn.relu
         self.my_seed = 13
         self.init_scale = 1
-        self.mask_rate = 0.05
+        self.mask_rate = 0.125
         self.lr = query_kwargs("lr", 3e-3, **kwargs)
-        self.loss_fn = cross_entropy
+        self.loss_fn = nll_logits_loss#cross_entropy
 
         self.initialize_model()
 
@@ -305,22 +323,47 @@ class Transformer():
         detokens = bijective_reverse(tokens, parameters)
         # now the tokens should be close to the sequence_dict items
         result_sequence = vectors_to_sequence(detokens, sequence_dict)
+
+        sequence = sepia.seq.data.one_hot_to_sequence(dataloader.dataset[ii,0], model.token_dict)
+        print(sequence, dataloader.dataset[ii].shape)
+        vector_tokens = sepia.seq.functional.batch_bijective_forward(dataloader.dataset[ii], model.parameters[0])
+        loss = model.calc_loss(vector_tokens, \
+                                                           dataloader.dataset[ii], model.parameters)
+        print(model(sequence), loss)
+        
+        decoded = model.forward(vector_tokens, model.parameters)
+        predicted = sepia.seq.functional.batch_bijective_reverse(decoded, model.parameters[0])
+        pred_sequence = sepia.seq.data.one_hot_to_sequence(predicted[0], model.token_dict)
+        print("other pathway: ", pred_sequence, "\n")
+        loss_sum += loss
         """
         # forward pass
 
         # convert string sequence to numerical vector
-        tokens = sequence_to_vectors(sequence, self.token_dict, \
-                pad_to = self.seq_length)
+        #tokens = sequence_to_vectors(sequence, self.token_dict, \
+        #        pad_to = self.seq_length)
 
-        one_hot = tokens_to_one_hot(tokens, pad_to = self.seq_length,\
-                pad_classes_to = self.token_dim)
+        tokens = sepia.seq.data.batch_sequence_to_vectors(\
+                np.array([sequence]*256),\
+                self.token_dict, pad_to=self.seq_length)
 
-        vector_tokens = bijective_forward(one_hot, self.parameters[0])[None,:,:]
+        batch_to_one_hot = sepia.seq.data.compose_batch_tokens_to_one_hot(\
+                pad_to=self.seq_length,\
+                pad_classes_to=self.token_dim)
+                
+        #one_hot = tokens_to_one_hot(tokens, pad_to = self.seq_length,\
+        #        pad_classes_to = self.token_dim)[None,:,:]
+        one_hot = batch_to_one_hot(tokens)
+
+        vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])#[None,:,:]
         #vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])
-        decoded = self.forward(vector_tokens, self.parameters)
-        output_tokens = bijective_reverse(decoded[0], self.parameters[0])
+        loss = self.calc_loss(vector_tokens, one_hot, self.parameters)
+        print(f"loss in __call__{loss}")
 
-        output_sequence = one_hot_to_sequence(output_tokens, self.token_dict)
+        decoded = self.forward(vector_tokens, self.parameters)
+        output_tokens = batch_bijective_reverse(decoded, self.parameters[0])
+
+        output_sequence = one_hot_to_sequence(output_tokens[0], self.token_dict)
         return output_sequence
 
     def calc_loss(self, masked_tokens, target, parameters) -> float:
