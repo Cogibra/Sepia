@@ -141,6 +141,7 @@ class Transformer():
         self.loss_fn = nll_logits_loss#cross_entropy
 
         self.initialize_model()
+        self.verbose = 0
 
     def get_token_dict(self) -> dict:
 
@@ -340,25 +341,61 @@ class Transformer():
         # forward pass
 
         # convert string sequence to numerical vector
-        #tokens = sequence_to_vectors(sequence, self.token_dict, \
-        #        pad_to = self.seq_length)
+        tokens = sequence_to_vectors(sequence, self.token_dict, \
+                pad_to = self.seq_length)
+                
+        one_hot = tokens_to_one_hot(tokens, pad_to = self.seq_length,\
+                pad_classes_to = self.token_dim)[None,:,:]
 
+        vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])#[None,:,:]
+        #vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])
+
+        if self.verbose:
+            loss = self.calc_loss(vector_tokens, one_hot, self.parameters)
+            print(f"loss in call {loss}")
+
+        decoded = self.forward(vector_tokens, self.parameters)
+        output_tokens = batch_bijective_reverse(decoded, self.parameters[0])
+
+        output_sequence = one_hot_to_sequence(output_tokens[0], self.token_dict)
+        return output_sequence
+
+    def rescue_call(self, sequence: str) -> str:
+        """
+        This function rescues the expected behavior of SMILES sequence inference
+        by using the batch functions for converting strings to tokens and tokens to one hot.
+        Note that the batch (i.e. a list of strings) must be the same length as the training batch size
+        This can be achieved by expanding a single sequence out to the training batch size, e.g. for 256"
+
+        predicted_sequence = model.rescue_call([sequence] * 256)
+        """
+
+        # forward pass
+
+        # convert string sequence to numerical vector
+        if type(sequence) == str:
+            sequence = np.array([sequence])
+
+        if type(sequence) == np.ndarray:
+            pass
+        else:
+            sequence = np.array(sequence)
+
+        
         tokens = sepia.seq.data.batch_sequence_to_vectors(\
-                np.array([sequence]*256),\
+                sequence,\
                 self.token_dict, pad_to=self.seq_length)
 
         batch_to_one_hot = sepia.seq.data.compose_batch_tokens_to_one_hot(\
                 pad_to=self.seq_length,\
                 pad_classes_to=self.token_dim)
                 
-        #one_hot = tokens_to_one_hot(tokens, pad_to = self.seq_length,\
-        #        pad_classes_to = self.token_dim)[None,:,:]
         one_hot = batch_to_one_hot(tokens)
 
         vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])#[None,:,:]
-        #vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])
-        loss = self.calc_loss(vector_tokens, one_hot, self.parameters)
-        print(f"loss in __call__{loss}")
+        if self.verbose:
+            loss = self.calc_loss(vector_tokens, one_hot, self.parameters)
+            print(f"loss in call {loss}")
 
         decoded = self.forward(vector_tokens, self.parameters)
         output_tokens = batch_bijective_reverse(decoded, self.parameters[0])
