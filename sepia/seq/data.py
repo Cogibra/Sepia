@@ -4,7 +4,7 @@ import jax
 
 import numpy as np
 import numpy.random as npr
-aa_keys = "arndcqeghilkmfpstwyvuox".upper()
+aa_keys = "arndcqeghilkmfpstwyvuox"
 NULL_ELEMENT = None
 
 def make_sequence_dict(vocabulary: str, vector_length: int=32, my_seed: int=42) -> dict:

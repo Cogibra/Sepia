@@ -131,12 +131,12 @@ class Transformer():
         self.seq_length = query_kwargs("seq_length", 10, **kwargs)
         self.encoder_size = query_kwargs("encoder_size", 4, **kwargs)
         self.decoder_size = query_kwargs("decoder_size", 4, **kwargs)
+        self.mask_rate = query_kwargs("mask_rate", 0.5, **kwargs)
         self.hidden_dim = 64
         self.mlp_hidden_dim = 48 
         self.mlp_activation = jax.nn.relu
         self.my_seed = 13
         self.init_scale = 1
-        self.mask_rate = 0.125
         self.lr = query_kwargs("lr", 3e-3, **kwargs)
         self.loss_fn = nll_logits_loss#cross_entropy
 
@@ -267,6 +267,7 @@ class Transformer():
         encoder_stack = parameters[1]
         decoder_stack = parameters[2]
         
+
         # encoder stack: list of encoder parameters
         encoded = x 
         for encoder_params in encoder_stack:
@@ -311,7 +312,6 @@ class Transformer():
         encoded = self.forward_encode(vector_tokens, self.parameters)
 
         return encoded
-
 
     def __call__(self, sequence: str) -> str:
         """
