@@ -127,7 +127,7 @@ def batch_one_hot_to_sequence(one_hot: jnp.array, sequence_dict: dict) -> list:
     assert shape_length == 3, f"expected 3 dims in one_hot batch vector, got {shape_length}"
 
     output = []
-    #loop through the 
+    # loop through each sequence
     for ii in range(one_hot.shape[0]):
         
         output.append(one_hot_to_sequence(one_hot[ii], sequence_dict))

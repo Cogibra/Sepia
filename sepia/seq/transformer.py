@@ -314,30 +314,15 @@ class Transformer():
 
         return encoded
 
-    def __call__(self, sequence: str) -> str:
+    def __call__(self, sequence: list) -> str:
         """
-        # forward pass  
-        my_seq = "wyavilmf"
-        sequence_vectors = sequence_to_vectors(my_seq, sequence_dict)
-        tokens = bijective_forward(sequence_vectors, parameters)
+        perform inference on a list of sequences in string format. 
 
-        # reverse pass 
-        detokens = bijective_reverse(tokens, parameters)
-        # now the tokens should be close to the sequence_dict items
-        result_sequence = vectors_to_sequence(detokens, sequence_dict)
+        lists are converted to numpy arrays to facilitate the batch sequence to vectors
+        function
 
-        sequence = sepia.seq.data.one_hot_to_sequence(dataloader.dataset[ii,0], model.token_dict)
-        print(sequence, dataloader.dataset[ii].shape)
-        vector_tokens = sepia.seq.functional.batch_bijective_forward(dataloader.dataset[ii], model.parameters[0])
-        loss = model.calc_loss(vector_tokens, \
-                                                           dataloader.dataset[ii], model.parameters)
-        print(model(sequence), loss)
-        
-        decoded = model.forward(vector_tokens, model.parameters)
-        predicted = sepia.seq.functional.batch_bijective_reverse(decoded, model.parameters[0])
-        pred_sequence = sepia.seq.data.one_hot_to_sequence(predicted[0], model.token_dict)
-        print("other pathway: ", pred_sequence, "\n")
-        loss_sum += loss
+        sequence can also be a single string, in which case it will first be 
+        put in a list in a numpy array and then ran through inference. 
         """
 
         # forward pass
