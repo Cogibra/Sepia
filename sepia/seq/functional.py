@@ -74,7 +74,7 @@ def self_attention(x: jnp.array, parameters: SelfAttentionW) -> jnp.array:
     dim_k = query.shape[-1]
     raw_attention = jnp.matmul(query, key.transpose(0,2,1)) / jnp.sqrt(dim_k)
 
-    attention = jax.nn.softmax(raw_attention, axis=0)
+    attention = jax.nn.softmax(raw_attention, axis=-2)
 
     output = jnp.matmul(attention, value)
     
@@ -122,7 +122,7 @@ def encoded_attention(x: jnp.array, encoded: jnp.array, parameters: EncodedAtten
 
     raw_attention = jnp.matmul(encoded_query, encoded_key.transpose(0,2,1)) / jnp.sqrt(dim_k)
 
-    attention = jax.nn.softmax(raw_attention, axis=0)
+    attention = jax.nn.softmax(raw_attention, axis=-2)
 
     output = jnp.matmul(attention, value)
     
