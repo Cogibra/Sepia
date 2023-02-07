@@ -58,8 +58,10 @@ class TestTransformer(unittest.TestCase):
 
                     output_single = model(my_input[0:1])
                     output_batch = model(my_input)
+                    output_string = model(my_input[0])
 
                     self.assertEqual(output_single[0], output_batch[0])
+                    self.assertEqual(output_single[0], output_string[0])
                     self.assertEqual(output_single, output_batch[0:1])
 
 

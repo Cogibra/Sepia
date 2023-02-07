@@ -22,6 +22,7 @@ from sepia.seq.data import \
         tokens_to_one_hot, \
         compose_batch_tokens_to_one_hot, \
         one_hot_to_sequence, \
+        batch_one_hot_to_sequence, \
         vectors_to_sequence, \
         sequence_to_vectors, \
         batch_sequence_to_vectors
@@ -86,7 +87,7 @@ def nll_logits_loss(predicted: jnp.array, target: jnp.array, ignore_index: int=N
     nll = (target * jnp.log(predicted_softmax) \
             + (1-target)*jnp.log(1-predicted_softmax) ) * dont_ignore
 
-    assert jnp.mean(nll) <= 0.0, f"c. entropy negative {-jnp.mean(ce)}\n targets: {target.max()}\n pred {predicted_softmax.max()}"
+    assert jnp.mean(nll) <= 0.0, f"c. entropy negative {-jnp.mean(nll)}\n targets: {target.max()}\n pred {predicted_softmax.max()}"
 
     return - jnp.mean(nll)
 
@@ -338,37 +339,6 @@ class Transformer():
         print("other pathway: ", pred_sequence, "\n")
         loss_sum += loss
         """
-        # forward pass
-
-        # convert string sequence to numerical vector
-        tokens = sequence_to_vectors(sequence, self.token_dict, \
-                pad_to = self.seq_length)
-                
-        one_hot = tokens_to_one_hot(tokens, pad_to = self.seq_length,\
-                pad_classes_to = self.token_dim)[None,:,:]
-
-        vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])#[None,:,:]
-        #vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])
-
-        if self.verbose:
-            loss = self.calc_loss(vector_tokens, one_hot, self.parameters)
-            print(f"loss in call {loss}")
-
-        decoded = self.forward(vector_tokens, self.parameters)
-        output_tokens = batch_bijective_reverse(decoded, self.parameters[0])
-
-        output_sequence = one_hot_to_sequence(output_tokens[0], self.token_dict)
-        return output_sequence
-
-    def rescue_call(self, sequence: str) -> str:
-        """
-        This function rescues the expected behavior of SMILES sequence inference
-        by using the batch functions for converting strings to tokens and tokens to one hot.
-        Note that the batch (i.e. a list of strings) must be the same length as the training batch size
-        This can be achieved by expanding a single sequence out to the training batch size, e.g. for 256"
-
-        predicted_sequence = model.rescue_call([sequence] * 256)
-        """
 
         # forward pass
 
@@ -400,7 +370,8 @@ class Transformer():
         decoded = self.forward(vector_tokens, self.parameters)
         output_tokens = batch_bijective_reverse(decoded, self.parameters[0])
 
-        output_sequence = one_hot_to_sequence(output_tokens[0], self.token_dict)
+        output_sequence = batch_one_hot_to_sequence(output_tokens, self.token_dict)
+
         return output_sequence
 
     def calc_loss(self, masked_tokens, target, parameters) -> float:
@@ -490,7 +461,7 @@ if __name__ == "__main__":
 
     model = Transformer(lr=1e-2)
 
-    ha_tag = "YPYDVPDYA"
+    ha_tag = "YPYDVPDYA".lower()
 
     dataset = [ha_tag, ha_tag, ha_tag]
 
