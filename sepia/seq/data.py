@@ -117,6 +117,24 @@ def one_hot_to_sequence(one_hot: jnp.array, sequence_dict: dict) -> str:
 
     return sequence
 
+def batch_one_hot_to_sequence(one_hot: jnp.array, sequence_dict: dict) -> list:
+    """
+    process a batch of sequences represented by one hot encodings
+    returns a list of strings
+    """
+
+    shape_length = len(one_hot.shape)
+    assert shape_length == 3, f"expected 3 dims in one_hot batch vector, got {shape_length}"
+
+    output = []
+    #loop through the 
+    for ii in range(one_hot.shape[0]):
+        
+        output.append(one_hot_to_sequence(one_hot[ii], sequence_dict))
+
+    return output
+
+
 def vectors_to_sequence(sequence_vectors: jnp.array, sequence_dict: dict) -> str:
 
     sequence = ""
