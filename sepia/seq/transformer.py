@@ -45,8 +45,8 @@ from sepia.seq.functional import \
 
 # functions
 from sepia.seq.functional import \
-        encoder, \
-        decoder, \
+        encoder_layer, \
+        decoder_layer, \
         bijective_forward, \
         batch_bijective_forward, \
         batch_bijective_reverse, \
@@ -273,13 +273,13 @@ class Transformer():
         encoded = x 
         for encoder_params in encoder_stack:
 
-            encoded = encoder(encoded, encoder_params)
+            encoded = encoder_layer(encoded, encoder_params)
 
         # decoder stack: list of encoder parameters
         decoded = 1.0 * encoded
         for decoder_params in decoder_stack:
 
-            decoded = decoder(decoded, encoded, decoder_params)
+            decoded = decoder_layer(decoded, encoded, decoder_params)
 
         return decoded
     
@@ -296,7 +296,7 @@ class Transformer():
         encoded = x 
         for encoder_params in encoder_stack:
 
-            encoded = encoder(encoded, encoder_params)
+            encoded = encoder_layer(encoded, encoder_params)
 
         return encoded
     

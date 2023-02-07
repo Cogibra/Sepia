@@ -7,20 +7,6 @@ from jax import grad
 import numpy.random as npr
 
 from sepia.seq.transformer import Transformer
-from sepia.seq.functional import \
-        NICEParametersWB, \
-        NICEParametersW, \
-        SelfAttentionWB, \
-        SelfAttentionW, \
-        EncodedAttentionW,\
-        EncoderParams, \
-        DecoderParams, \
-        MLPParams, \
-        self_attention, \
-        encoder, \
-        decoder, \
-        bijective_forward, \
-        bijective_reverse
 
 from sepia.seq.dataloader import SeqDataLoader
 

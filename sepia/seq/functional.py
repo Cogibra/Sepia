@@ -80,7 +80,7 @@ def self_attention(x: jnp.array, parameters: SelfAttentionW) -> jnp.array:
     
     return output
 
-def encoder(x: jnp.array, parameters: EncoderParams) -> jnp.array:
+def encoder_layer(x: jnp.array, parameters: EncoderParams) -> jnp.array:
 
     attention = self_attention(x, parameters.attention_weights)
     attention_residual = x + attention
@@ -128,7 +128,7 @@ def encoded_attention(x: jnp.array, encoded: jnp.array, parameters: EncodedAtten
     
     return output
 
-def decoder(x: jnp.array, encoded: jnp.array, parameters: DecoderParams) -> jnp.array:
+def decoder_layer(x: jnp.array, encoded: jnp.array, parameters: DecoderParams) -> jnp.array:
     # encoded is the last output from encoder layers
     # sometimes called 'memory'
 

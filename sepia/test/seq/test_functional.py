@@ -16,8 +16,8 @@ from sepia.seq.functional import \
         DecoderParams, \
         MLPParams, \
         self_attention, \
-        encoder, \
-        decoder, \
+        encoder_layer, \
+        decoder_layer, \
         bijective_forward, \
         bijective_reverse, \
         get_parameters, \
@@ -105,7 +105,7 @@ class TestDecoder(unittest.TestCase):
 
     def test_decoder(self):
 
-        encoded = decoder(self.x, self.encoded, self.decoder_parameters)
+        encoded = decoder_layer(self.x, self.encoded, self.decoder_parameters)
 
         self.assertEqual(self.x.shape, encoded.shape)
 
@@ -130,7 +130,7 @@ class TestEncoder(unittest.TestCase):
 
     def test_encoder(self):
 
-        encoded = encoder(self.x, self.parameters)
+        encoded = encoder_layer(self.x, self.parameters)
 
         self.assertEqual(self.x.shape, encoded.shape)
 

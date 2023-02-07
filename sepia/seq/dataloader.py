@@ -39,8 +39,8 @@ from sepia.seq.functional import \
 
 # functions
 from sepia.seq.functional import \
-        encoder, \
-        decoder, \
+        encoder_layer, \
+        decoder_layer, \
         bijective_forward, \
         bijective_reverse
 
