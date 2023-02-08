@@ -432,6 +432,7 @@ class Transformer():
         save_count = query_kwargs("save_count", 0, **kwargs)
         save_every = max_epochs // max([1, save_count])
         display_every = max_epochs // max([1, display_count])
+        tag = query_kwargs("tag", "no_tag", **kwargs)
 
         val_dataloader = query_kwargs("val_dataloader", None, **kwargs)
 
@@ -455,11 +456,9 @@ class Transformer():
                 if val_dataloader is not None:
                     pass
                 print(f"loss at epoch {epoch}:  {cumulative_loss / (batch_index+1.):.3e}")
+
             if (epoch % save_every == 0 or epoch == max_epochs-1) and save_count:
-                checkpoint_path = os.path.join("parameters", f"temp_epoch{epoch}.npy") 
-                print(f"saving checkpoint at epoch {epoch} to {checkpoint_path}")
-                jnp.save(checkpoint_path, get_parameters(self.parameters))
-                checkpoint_path = os.path.join("parameters", f"temp_epoch{epoch}.npy") 
+                checkpoint_path = os.path.join("parameters", f"i{tag}_epoch{epoch}.npy") 
                 print(f"saving checkpoint at epoch {epoch} to {checkpoint_path}")
                 jnp.save(checkpoint_path, get_parameters(self.parameters))
     
