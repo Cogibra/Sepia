@@ -7,12 +7,14 @@ from jax import numpy as jnp
 from jax import grad
 
 import numpy.random as npr
+import numpy as np
 
 from collections import namedtuple
 
 from sepia.common import query_kwargs
 import sepia.optimizer as optimizer
 
+import sepia
 from sepia.seq.data import \
         aa_keys, \
         make_sequence_dict, \
@@ -20,6 +22,7 @@ from sepia.seq.data import \
         tokens_to_one_hot, \
         compose_batch_tokens_to_one_hot, \
         one_hot_to_sequence, \
+        batch_one_hot_to_sequence, \
         vectors_to_sequence, \
         sequence_to_vectors, \
         batch_sequence_to_vectors
@@ -33,17 +36,22 @@ from sepia.seq.functional import \
         SelfAttentionWB, \
         SelfAttentionW, \
         EncodedAttentionW, \
-        EncoderParams, \
-        DecoderParams, \
+        EncoderLayerParams, \
+        DecoderLayerParams, \
         make_layers_tuple, \
         get_parameters,\
         set_parameters,\
+        LinearParams,\
+        MHEncoderLayerParams,\
+        MHDecoderLayerParams,\
         MLPParams 
 
 # functions
 from sepia.seq.functional import \
-        encoder, \
-        decoder, \
+        encoder_layer, \
+        decoder_layer, \
+        multihead_encoder_layer, \
+        multihead_decoder_layer, \
         bijective_forward, \
         batch_bijective_forward, \
         batch_bijective_reverse, \
@@ -68,9 +76,25 @@ def cross_entropy(predicted: jnp.array, target: jnp.array, ignore_index: int=Non
 
     ce = target * jnp.log(predicted_softmax) * dont_ignore
 
-    assert jnp.mean(ce) <= 0.0, f"c. entropy negative {-jnp.mean(ce)}\n targets: {target.max()}\n pred {predicted_softmax.max()}"
+    assert jnp.sum(ce) <= 0.0, f"c. entropy negative {-jnp.mean(ce)}\n targets: {target.max()}\n pred {predicted_softmax.max()}"
 
-    return - jnp.mean(ce)
+    return - jnp.sum(ce)
+
+def nll_logits_loss(predicted: jnp.array, target: jnp.array, ignore_index: int=None) -> float:
+
+    predicted_softmax = jax.nn.softmax(predicted)
+
+    if ignore_index is not None:
+        dont_ignore = 1.0 * (jnp.argmax(target) != ignore_index)
+    else: 
+        dont_ignore = 1.0
+
+    nll = (target * jnp.log(predicted_softmax) \
+            + (1-target)*jnp.log(1-predicted_softmax) ) * dont_ignore
+
+    assert jnp.mean(nll) <= 0.0, f"c. entropy negative {-jnp.mean(nll)}\n targets: {target.max()}\n pred {predicted_softmax.max()}"
+
+    return - jnp.mean(nll)
 
 def mae(predicted, target):
 
@@ -113,16 +137,18 @@ class Transformer():
         self.seq_length = query_kwargs("seq_length", 10, **kwargs)
         self.encoder_size = query_kwargs("encoder_size", 4, **kwargs)
         self.decoder_size = query_kwargs("decoder_size", 4, **kwargs)
+        self.mask_rate = query_kwargs("mask_rate", 0.5, **kwargs)
+        self.number_heads = query_kwargs("number_heads", 2, **kwargs)
         self.hidden_dim = 64
         self.mlp_hidden_dim = 48 
         self.mlp_activation = jax.nn.relu
         self.my_seed = 13
         self.init_scale = 1
-        self.mask_rate = 0.05
         self.lr = query_kwargs("lr", 3e-3, **kwargs)
-        self.loss_fn = cross_entropy
+        self.loss_fn = nll_logits_loss#cross_entropy
 
         self.initialize_model()
+        self.verbose = 0
 
     def get_token_dict(self) -> dict:
 
@@ -182,9 +208,20 @@ class Transformer():
             mlp_params = MLPParams(mlp_weights=mlp_weights,\
                     mlp_biases=mlp_biases)
 
-            encoder_parameters = EncoderParams( \
-                    attention_weights = attention_weights, \
-                    mlp_params = mlp_params)
+            if self.number_heads == 1:
+                encoder_parameters = EncoderLayerParams( \
+                        attention_weights = attention_weights, \
+                        mlp_params = mlp_params)
+            else:
+                linear_weights = glorot(3, self.number_heads,\
+                        self.token_dim, self.token_dim)
+                reshape_weights = glorot(self.token_dim * self.number_heads, \
+                        self.token_dim)
+                encoder_parameters = MHEncoderLayerParams( \
+                        attention_weights = attention_weights, \
+                        mlp_params = mlp_params,\
+                        linear_weights = linear_weights,\
+                        reshape_weights = reshape_weights)
 
             encoder_stack.append(encoder_parameters)
         encoder_stack = EncoderStack(*encoder_stack)
@@ -223,13 +260,32 @@ class Transformer():
                     self_weights=self_attention_weights,\
                     encoded_weights=encoded_weights)
 
-            decoder_parameters = DecoderParams( \
-                encoded_attention = attention_weights, \
-                mlp_params = mlp_params)
+            if self.number_heads == 1:
+                decoder_parameters = DecoderLayerParams( \
+                    encoded_attention = attention_weights, \
+                    mlp_params = mlp_params)
+            else:
+                linear_weights = glorot(2, 3, self.number_heads,\
+                        self.token_dim, self.token_dim)
+                reshape_weights = glorot(2, self.token_dim * self.number_heads, \
+                        self.token_dim)
+                decoder_parameters = MHDecoderLayerParams( \
+                    encoded_attention = attention_weights, \
+                    mlp_params = mlp_params,\
+                    linear_weights = linear_weights,\
+                    reshape_weights = reshape_weights)
 
             decoder_stack.append(decoder_parameters)
 
         decoder_stack = DecoderStack(*decoder_stack)
+
+        if self.number_heads == 1:
+            self.encoder_layer = encoder_layer
+            self.decoder_layer = decoder_layer
+        else:
+            self.encoder_layer = multihead_encoder_layer
+            self.decoder_layer = multihead_decoder_layer
+
 
         self.parameters = TransformerParams(token_parameters, \
                 encoder_stack, \
@@ -252,13 +308,14 @@ class Transformer():
         encoded = x 
         for encoder_params in encoder_stack:
 
-            encoded = encoder(encoded, encoder_params)
+            encoded = self.encoder_layer(encoded, encoder_params)
+
 
         # decoder stack: list of encoder parameters
         decoded = 1.0 * encoded
         for decoder_params in decoder_stack:
 
-            decoded = decoder(decoded, encoded, decoder_params)
+            decoded = self.decoder_layer(decoded, encoded, decoder_params)
 
         return decoded
     
@@ -275,7 +332,7 @@ class Transformer():
         encoded = x 
         for encoder_params in encoder_stack:
 
-            encoded = encoder(encoded, encoder_params)
+            encoded = encoder_layer(encoded, encoder_params)
 
         return encoded
     
@@ -293,34 +350,49 @@ class Transformer():
 
         return encoded
 
-
-    def __call__(self, sequence: str) -> str:
+    def __call__(self, sequence: list) -> str:
         """
-        # forward pass  
-        my_seq = "wyavilmf"
-        sequence_vectors = sequence_to_vectors(my_seq, sequence_dict)
-        tokens = bijective_forward(sequence_vectors, parameters)
+        perform inference on a list of sequences in string format. 
 
-        # reverse pass 
-        detokens = bijective_reverse(tokens, parameters)
-        # now the tokens should be close to the sequence_dict items
-        result_sequence = vectors_to_sequence(detokens, sequence_dict)
+        lists are converted to numpy arrays to facilitate the batch sequence to vectors
+        function
+
+        sequence can also be a single string, in which case it will first be 
+        put in a list in a numpy array and then ran through inference. 
         """
+
         # forward pass
 
         # convert string sequence to numerical vector
-        tokens = sequence_to_vectors(sequence, self.token_dict, \
-                pad_to = self.seq_length)
+        if type(sequence) == str:
+            sequence = np.array([sequence])
 
-        one_hot = tokens_to_one_hot(tokens, pad_to = self.seq_length,\
-                pad_classes_to = self.token_dim)
+        if type(sequence) == np.ndarray:
+            pass
+        else:
+            sequence = np.array(sequence)
 
-        vector_tokens = bijective_forward(one_hot, self.parameters[0])[None,:,:]
-        #vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])
+        
+        tokens = sepia.seq.data.batch_sequence_to_vectors(\
+                sequence,\
+                self.token_dict, pad_to=self.seq_length)
+
+        batch_to_one_hot = sepia.seq.data.compose_batch_tokens_to_one_hot(\
+                pad_to=self.seq_length,\
+                pad_classes_to=self.token_dim)
+                
+        one_hot = batch_to_one_hot(tokens)
+
+        vector_tokens = batch_bijective_forward(one_hot, self.parameters[0])#[None,:,:]
+        if self.verbose:
+            loss = self.calc_loss(vector_tokens, one_hot, self.parameters)
+            print(f"loss in call {loss}")
+
         decoded = self.forward(vector_tokens, self.parameters)
-        output_tokens = bijective_reverse(decoded[0], self.parameters[0])
+        output_tokens = batch_bijective_reverse(decoded, self.parameters[0])
 
-        output_sequence = one_hot_to_sequence(output_tokens, self.token_dict)
+        output_sequence = batch_one_hot_to_sequence(output_tokens, self.token_dict)
+
         return output_sequence
 
     def calc_loss(self, masked_tokens, target, parameters) -> float:
@@ -360,6 +432,7 @@ class Transformer():
         save_count = query_kwargs("save_count", 0, **kwargs)
         save_every = max_epochs // max([1, save_count])
         display_every = max_epochs // max([1, display_count])
+        tag = query_kwargs("tag", "no_tag", **kwargs)
 
         val_dataloader = query_kwargs("val_dataloader", None, **kwargs)
 
@@ -383,11 +456,9 @@ class Transformer():
                 if val_dataloader is not None:
                     pass
                 print(f"loss at epoch {epoch}:  {cumulative_loss / (batch_index+1.):.3e}")
+
             if (epoch % save_every == 0 or epoch == max_epochs-1) and save_count:
-                checkpoint_path = os.path.join("parameters", f"temp_epoch{epoch}.npy") 
-                print(f"saving checkpoint at epoch {epoch} to {checkpoint_path}")
-                jnp.save(checkpoint_path, get_parameters(self.parameters))
-                checkpoint_path = os.path.join("parameters", f"temp_epoch{epoch}.npy") 
+                checkpoint_path = os.path.join("parameters", f"i{tag}_epoch{epoch}.npy") 
                 print(f"saving checkpoint at epoch {epoch} to {checkpoint_path}")
                 jnp.save(checkpoint_path, get_parameters(self.parameters))
     
@@ -400,17 +471,12 @@ class Transformer():
         np_parameters = jnp.load(filepath)
         self.restore_parameters(np_parameters)
 
-
-
-                
-
-
 if __name__ == "__main__":
     # ad-hoc test for training transformer
 
-    model = Transformer(lr=1e-2)
+    model = Transformer(lr=1e-3)
 
-    ha_tag = "YPYDVPDYA"
+    ha_tag = "YPYDVPDYA".lower()
 
     dataset = [ha_tag, ha_tag, ha_tag]
 

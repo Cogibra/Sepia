@@ -12,18 +12,37 @@ from sepia.seq.functional import \
         SelfAttentionWB, \
         SelfAttentionW, \
         EncodedAttentionW,\
-        EncoderParams, \
-        DecoderParams, \
+        EncoderLayerParams, \
+        DecoderLayerParams, \
         MLPParams, \
         self_attention, \
-        encoder, \
-        decoder, \
+        encoder_layer, \
+        decoder_layer, \
         bijective_forward, \
         bijective_reverse, \
         get_parameters, \
+        multilinear, \
         set_parameters
 
 from sepia.seq.transformer import Transformer
+
+class TestMultiHead(unittest.TestCase):
+
+    def setUp(self):
+        pass
+
+    def test_multilinear(self):
+        # multilinear = jax.vmap(jnp.matmul, in_axes=(None, 0))
+        a = npr.rand(4,5,9)
+        w = npr.randn(3,9,9)
+
+        
+        multi_output = multilinear(a, w)
+        loop_output = 0.0 * multi_output
+        for ii in range(w.shape[0]):
+            loop_output = loop_output.at[ii].set(jnp.matmul(a, w[ii]))
+
+        self.assertEqual(0.0, jnp.mean(jnp.abs(loop_output - multi_output)))
 
 class TestGetSetParameters(unittest.TestCase):
 
@@ -95,7 +114,7 @@ class TestDecoder(unittest.TestCase):
         mlp_params = MLPParams(mlp_weights=mlp_weights,\
                 mlp_biases=mlp_biases)
 
-        self.decoder_parameters = DecoderParams( \
+        self.decoder_parameters = DecoderLayerParams( \
                 encoded_attention = attention_weights, \
                 mlp_params = mlp_params)
                 
@@ -105,7 +124,7 @@ class TestDecoder(unittest.TestCase):
 
     def test_decoder(self):
 
-        encoded = decoder(self.x, self.encoded, self.decoder_parameters)
+        encoded = decoder_layer(self.x, self.encoded, self.decoder_parameters)
 
         self.assertEqual(self.x.shape, encoded.shape)
 
@@ -124,13 +143,13 @@ class TestEncoder(unittest.TestCase):
         mlp_params = MLPParams(mlp_weights=mlp_weights,\
                 mlp_biases=mlp_biases)
 
-        self.parameters = EncoderParams( \
+        self.parameters = EncoderLayerParams( \
                 attention_weights = attention_weights, \
                 mlp_params = mlp_params)
 
     def test_encoder(self):
 
-        encoded = encoder(self.x, self.parameters)
+        encoded = encoder_layer(self.x, self.parameters)
 
         self.assertEqual(self.x.shape, encoded.shape)
 

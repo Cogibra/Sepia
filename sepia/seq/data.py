@@ -4,7 +4,7 @@ import jax
 
 import numpy as np
 import numpy.random as npr
-aa_keys = "arndcqeghilkmfpstwyvuox".upper()
+aa_keys = "arndcqeghilkmfpstwyvuox"
 NULL_ELEMENT = None
 
 def make_sequence_dict(vocabulary: str, vector_length: int=32, my_seed: int=42) -> dict:
@@ -116,6 +116,24 @@ def one_hot_to_sequence(one_hot: jnp.array, sequence_dict: dict) -> str:
             sequence += "" #key_dict[list(key_dict.keys())[0]]
 
     return sequence
+
+def batch_one_hot_to_sequence(one_hot: jnp.array, sequence_dict: dict) -> list:
+    """
+    process a batch of sequences represented by one hot encodings
+    returns a list of strings
+    """
+
+    shape_length = len(one_hot.shape)
+    assert shape_length == 3, f"expected 3 dims in one_hot batch vector, got {shape_length}"
+
+    output = []
+    # loop through each sequence in batch
+    for ii in range(one_hot.shape[0]):
+        
+        output.append(one_hot_to_sequence(one_hot[ii], sequence_dict))
+
+    return output
+
 
 def vectors_to_sequence(sequence_vectors: jnp.array, sequence_dict: dict) -> str:
 

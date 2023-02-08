@@ -19,12 +19,23 @@ SelfAttentionWB = namedtuple("SelfAttentionWB", field_names=("weights", "biases"
 SelfAttentionW = namedtuple("SelfAttentionW", field_names=("weights"))
 EncodedAttentionW = namedtuple("EncodedAttentionW", \
         field_names=("self_weights", "encoded_weights")) 
-EncoderParams = namedtuple("EncoderParams", \
-        field_names=("attention_weights", "mlp_params"))
-DecoderParams = namedtuple("DecoderParams", \
-        field_names=("encoded_attention", "mlp_params"))
 MLPParams = namedtuple("MLPParams", \
         field_names=("mlp_weights", "mlp_biases"))
+LinearParams = namedtuple("LinearParams", \
+        field_names=("linear_weights"))
+
+EncoderLayerParams = namedtuple("EncoderLayerParams", \
+        field_names=("attention_weights", "mlp_params"))
+DecoderLayerParams = namedtuple("DecoderLayerParams", \
+        field_names=("encoded_attention", "mlp_params"))
+# Stands for MultiHeadEncoderLayerParams
+MHEncoderLayerParams = namedtuple("MHEncoderLayerParams",\
+        field_names=("attention_weights", "mlp_params", \
+        "linear_weights", "reshape_weights"))
+# Stands for MultiHeadDecoderLayerParams
+MHDecoderLayerParams = namedtuple("MHDecoderLayerParams",\
+        field_names=("encoded_attention", "mlp_params", \
+        "linear_weights", "reshape_weights"))
 
 dot = lambda a, b: jnp.dot(a, b.T)
 seq_dot = jax.vmap(dot)
@@ -49,6 +60,18 @@ def mlp(x: jnp.array, parameters: MLPParams, activation=jax.nn.relu) -> jnp.arra
 
     return x
 
+def dot_product_attention(key: jnp.array, query: jnp.array, value: jnp.array) -> jnp.array:
+
+    dim_k = query.shape[-1]
+    raw_attention = jnp.matmul(query, key.transpose(0,2,1)) / jnp.sqrt(dim_k)
+
+    attention = jax.nn.softmax(raw_attention, axis=-2)
+
+    output = jnp.matmul(attention, value)
+
+    return output
+
+
 def self_attention(x: jnp.array, parameters: SelfAttentionW) -> jnp.array:
     """
     This function is a dot product self-attention layer
@@ -71,40 +94,214 @@ def self_attention(x: jnp.array, parameters: SelfAttentionW) -> jnp.array:
     query = key_query_value[:,:,kqv_split:2*kqv_split]
     value = key_query_value[:,:,2*kqv_split:3*kqv_split]
 
-    raw_attention = batch_seq_dot(key, query)[:,:,None]
+    return dot_product_attention(key, query, value)
 
-    attention = jax.nn.softmax(raw_attention, axis=0)
+multihead_dot_product_attention = jax.pmap(dot_product_attention)
+multihead_dot_product_attention_v = jax.vmap(dot_product_attention)
+multilinear = jax.vmap(jnp.matmul, in_axes=(None, 0))
 
-    output = attention * value
+def multihead_attention(x: jnp.array, parameters: SelfAttentionW, \
+        linear_weights: jnp.array, reshape_weights: jnp.array) -> jnp.array:
+
+    kqv_split = x.shape[-1]
+    
+    key_query_value = jnp.matmul(x, parameters.weights)
+
+    key = key_query_value[:,:,0:kqv_split]
+    query = key_query_value[:,:,kqv_split:2*kqv_split]
+    value = key_query_value[:,:,2*kqv_split:3*kqv_split]
+
+    # project key, query, value, to multiple
+    keys = multilinear(key, linear_weights[0])
+    querys = multilinear(query, linear_weights[1])
+    values = multilinear(value, linear_weights[2])
+
+    multi_attention = multihead_dot_product_attention_v(keys, querys, values)
+
+    # concatenate multihead attention
+    concatenated = multi_attention[0]
+    for ii in range(1, multi_attention.shape[0]):
+        concatenated = jnp.append(concatenated, multi_attention[ii], axis=-1)
+
+    reshaped_attention = jnp.matmul(concatenated, reshape_weights)
+
+    return reshaped_attention 
+
+def encoder_layer(x: jnp.array, parameters: EncoderLayerParams) -> jnp.array:
+
+    attention = self_attention(x, parameters.attention_weights)
+    attention_residual = x + attention
+
+    # batch by sequence length by token dim
+    gain = 1.0
+    standard_deviation = jnp.std(attention_residual, axis=(-2,-1), keepdims=True)
+    attention_mean = jnp.mean(attention_residual, axis=(-2,-1), keepdims=True)
+
+    normed_attention = (attention_residual - attention_mean) * (gain / standard_deviation)
+
+    output = mlp(normed_attention, parameters.mlp_params)
+    output_residual = normed_attention + output
+       
+    output_standard_deviation = jnp.std(output_residual, axis=(-2,-1), keepdims=True)
+    output_mean = jnp.mean(output_residual, axis=(-2,-1), keepdims=True)
+
+    normed_output = (output_residual - output_mean) * (gain / output_standard_deviation)
+
+    return normed_output
+
+def multihead_encoder_layer(x: jnp.array, parameters: MHEncoderLayerParams) -> jnp.array:
+
+    attention = multihead_attention(x, parameters.attention_weights, \
+            parameters.linear_weights, parameters.reshape_weights)
+    attention_residual = x + attention
+
+    # batch by sequence length by token dim
+    gain = 1.0
+    standard_deviation = jnp.std(attention_residual, axis=(-2,-1), keepdims=True)
+    attention_mean = jnp.mean(attention_residual, axis=(-2,-1), keepdims=True)
+
+    normed_attention = (attention_residual - attention_mean) * (gain / standard_deviation)
+
+    output = mlp(normed_attention, parameters.mlp_params)
+    output_residual = normed_attention + output
+       
+    output_standard_deviation = jnp.std(output_residual, axis=(-2,-1), keepdims=True)
+    output_mean = jnp.mean(output_residual, axis=(-2,-1), keepdims=True)
+
+    normed_output = (output_residual - output_mean) * (gain / output_standard_deviation)
+
+    return normed_output
+
+def encoded_attention(x: jnp.array, encoded: jnp.array, parameters: EncodedAttentionW) -> jnp.array:
+    # encoded_attention applies dot product self attention 
+    # using the key and query vectors from `encoded`
+    # and the value vector from `x`
+
+    kqv_split = x.shape[-1]
+    
+    key_query_value = jnp.matmul(x, parameters.weights)
+
+    value = key_query_value[:,:,2*kqv_split:3*kqv_split]
+
+    encoded_key_query_value = jnp.matmul(encoded, parameters.weights)
+
+    encoded_key = encoded_key_query_value[:,:,0:kqv_split]
+    encoded_query = encoded_key_query_value[:,:,kqv_split:2*kqv_split]
+
+    dim_k = encoded_query.shape[-1]
+
+    raw_attention = jnp.matmul(encoded_query, encoded_key.transpose(0,2,1)) / jnp.sqrt(dim_k)
+
+    attention = jax.nn.softmax(raw_attention, axis=-2)
+
+    output = jnp.matmul(attention, value)
     
     return output
 
-def encoder(x: jnp.array, parameters: EncoderParams) -> jnp.array:
+def multihead_encoded_attention(x: jnp.array, encoded: jnp.array, parameters: EncodedAttentionW,\
+        linear_weights: jnp.array, reshape_weights: jnp.array) -> jnp.array:
 
-    attention = self_attention(x, parameters.attention_weights)
+    kqv_split = x.shape[-1]
+    
+    key_query_value = jnp.matmul(x, parameters.weights)
+    value = key_query_value[:,:,2*kqv_split:3*kqv_split]
 
-    output = mlp(attention, parameters.mlp_params)
-        
-    return output
+    encoded_key_query_value = jnp.matmul(encoded, parameters.weights)
+    encoded_key = encoded_key_query_value[:,:,0:kqv_split]
+    encoded_query = encoded_key_query_value[:,:,kqv_split:2*kqv_split]
 
-def encoded_attention(x: jnp.array, encoded: jnp.array, parameters: EncodedAttentionW) -> jnp.array:
-    # EncDecAttentionW = namedtuple("EncDecAttention", \
-    #    field_names=("self_weights", "encoded_weights")) 
+    encoded_keys = multilinear(encoded_key, linear_weights[0])
+    encoded_querys = multilinear(encoded_query, linear_weights[1])
+    values = multilinear(value, linear_weights[2])
 
-    my_self_attention = self_attention(x, parameters.self_weights)
-    encoded_attention = self_attention(encoded, parameters.encoded_weights)
+    dim_k = encoded_querys.shape[-1]
 
-    output = my_self_attention + encoded_attention
+    multi_attention = multihead_dot_product_attention_v(encoded_keys, encoded_querys, values)
 
-    return output
+    # concatenate multihead attention
+    concatenated = multi_attention[0]
+    for ii in range(1, multi_attention.shape[0]):
+        concatenated = jnp.append(concatenated, multi_attention[ii], axis=-1)
 
-def decoder(x: jnp.array, encoded: jnp.array, parameters: DecoderParams) -> jnp.array:
+    reshaped_attention = jnp.matmul(concatenated, reshape_weights)
 
-    attention = encoded_attention(x, encoded, parameters.encoded_attention)
+    return reshaped_attention 
 
-    output = mlp(attention, parameters.mlp_params)
+def multihead_decoder_layer(x: jnp.array, encoded: jnp.array, parameters: DecoderLayerParams) -> jnp.array:
+    # encoded is the last output from encoder layers
+    # sometimes called 'memory'
 
-    return output
+    attention = multihead_attention(x, parameters.encoded_attention.self_weights, \
+            parameters.linear_weights[0], parameters.reshape_weights[0])
+    attention_residual = x + attention
+
+    # batch by sequence length by token dim
+    gain = 1.0
+    standard_deviation = jnp.std(attention_residual, axis=(-2,-1), keepdims=True)
+    attention_mean = jnp.mean(attention_residual, axis=(-2,-1), keepdims=True)
+
+    normed_attention = (attention_residual - attention_mean) * (gain / standard_deviation)
+
+    my_encoded_attention = multihead_encoded_attention(\
+            normed_attention, encoded, parameters.encoded_attention.encoded_weights,\
+            parameters.linear_weights[1], parameters.reshape_weights[1])
+
+    encoded_attention_residual = normed_attention + my_encoded_attention
+
+    encoded_standard_deviation = jnp.std(encoded_attention_residual, axis=(-2,-1), keepdims=True)
+    encoded_attention_mean = jnp.mean(encoded_attention_residual, axis=(-2,-1), keepdims=True)
+
+    normed_encoded_attention = (encoded_attention_residual - encoded_attention_mean) \
+            * (gain / encoded_standard_deviation)
+
+    output = mlp(normed_encoded_attention, parameters.mlp_params)
+
+    output_residual = normed_encoded_attention + output
+
+    output_residual_standard_deviation = jnp.std(output_residual, axis=(-2,-1), keepdims=True)
+    output_residual_mean = jnp.mean(output_residual, axis=(-2,-1), keepdims=True)
+
+    normed_output = (output_residual - output_residual_mean) \
+            * (gain / output_residual_standard_deviation)
+
+    return normed_output
+
+def decoder_layer(x: jnp.array, encoded: jnp.array, parameters: DecoderLayerParams) -> jnp.array:
+    # encoded is the last output from encoder layers
+    # sometimes called 'memory'
+
+    attention = self_attention(x, parameters.encoded_attention.self_weights)
+    attention_residual = x + attention
+
+    # batch by sequence length by token dim
+    gain = 1.0
+    standard_deviation = jnp.std(attention_residual, axis=(-2,-1), keepdims=True)
+    attention_mean = jnp.mean(attention_residual, axis=(-2,-1), keepdims=True)
+
+    normed_attention = (attention_residual - attention_mean) * (gain / standard_deviation)
+
+    my_encoded_attention = encoded_attention(\
+            normed_attention, encoded, parameters.encoded_attention.encoded_weights)
+
+    encoded_attention_residual = normed_attention + my_encoded_attention
+
+    encoded_standard_deviation = jnp.std(encoded_attention_residual, axis=(-2,-1), keepdims=True)
+    encoded_attention_mean = jnp.mean(encoded_attention_residual, axis=(-2,-1), keepdims=True)
+
+    normed_encoded_attention = (encoded_attention_residual - encoded_attention_mean) \
+            * (gain / encoded_standard_deviation)
+
+    output = mlp(normed_encoded_attention, parameters.mlp_params)
+
+    output_residual = normed_encoded_attention + output
+
+    output_residual_standard_deviation = jnp.std(output_residual, axis=(-2,-1), keepdims=True)
+    output_residual_mean = jnp.mean(output_residual, axis=(-2,-1), keepdims=True)
+
+    normed_output = (output_residual - output_residual_mean) \
+            * (gain / output_residual_standard_deviation)
+
+    return normed_output
 
 def bijective_forward(sequence_vectors: jnp.array, \
         parameters: NICEParametersWB, pad_to: int=1024) -> jnp.array:

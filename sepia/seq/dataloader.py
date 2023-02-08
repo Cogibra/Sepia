@@ -25,22 +25,11 @@ from sepia.seq.data import \
         sequence_to_vectors,\
         batch_sequence_to_vectors
 
-# parameters (namedtuples)
-from sepia.seq.functional import \
-        NICEParametersWB, \
-        NICEParametersW, \
-        SelfAttentionWB, \
-        SelfAttentionW, \
-        EncodedAttentionW, \
-        EncoderParams, \
-        DecoderParams, \
-        make_layers_tuple, \
-        MLPParams 
 
 # functions
 from sepia.seq.functional import \
-        encoder, \
-        decoder, \
+        encoder_layer, \
+        decoder_layer, \
         bijective_forward, \
         bijective_reverse
 
