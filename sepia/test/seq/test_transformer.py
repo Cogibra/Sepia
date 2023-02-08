@@ -30,6 +30,29 @@ class TestTransformer(unittest.TestCase):
 
         model.fit(dataloader, max_epochs=2)
 
+    def test_multihead(self):
+
+        my_seq = "arndcqeghilkmfpstwyvuox"
+        seq_length = len(my_seq)
+        batch_size = 4
+        encoder_size = 2
+        decoder_size = 2
+        for number_heads in [1,3,4]:
+            model = Transformer(number_heads=number_heads, \
+                    seq_length=seq_length,\
+                    encoder_size=encoder_size, \
+                    decoder_size=decoder_size)
+
+            my_input = [my_seq] * batch_size
+
+            output_single = model(my_input[0:1])
+            output_batch = model(my_input)
+            output_string = model(my_input[0])
+
+            self.assertEqual(output_single[0], output_batch[0])
+            self.assertEqual(output_single[0], output_string[0])
+            self.assertEqual(output_single, output_batch[0:1])
+
     def test_batch_size(self):
 
         my_seq = "arndcqeghilkmfpstwyvuox"

@@ -5,6 +5,7 @@ import sepia.seq.transformer
 from sepia.test.test_common import TestCommon
 from sepia.test.graph.test_functional import TestGraphConv
 from sepia.test.seq.test_functional import TestNICE,\
+        TestMultiHead,\
         TestSelfAttention,\
         TestEncoder,\
         TestGetSetParameters,\
