@@ -36,17 +36,22 @@ from sepia.seq.functional import \
         SelfAttentionWB, \
         SelfAttentionW, \
         EncodedAttentionW, \
-        EncoderParams, \
-        DecoderParams, \
+        EncoderLayerParams, \
+        DecoderLayerParams, \
         make_layers_tuple, \
         get_parameters,\
         set_parameters,\
+        LinearParams,\
+        MHEncoderLayerParams,\
+        MHDecoderLayerParams,\
         MLPParams 
 
 # functions
 from sepia.seq.functional import \
         encoder_layer, \
         decoder_layer, \
+        multihead_encoder_layer, \
+        multihead_decoder_layer, \
         bijective_forward, \
         batch_bijective_forward, \
         batch_bijective_reverse, \
@@ -133,6 +138,7 @@ class Transformer():
         self.encoder_size = query_kwargs("encoder_size", 4, **kwargs)
         self.decoder_size = query_kwargs("decoder_size", 4, **kwargs)
         self.mask_rate = query_kwargs("mask_rate", 0.5, **kwargs)
+        self.number_heads = query_kwargs("number_heads", 2, **kwargs)
         self.hidden_dim = 64
         self.mlp_hidden_dim = 48 
         self.mlp_activation = jax.nn.relu
@@ -202,9 +208,20 @@ class Transformer():
             mlp_params = MLPParams(mlp_weights=mlp_weights,\
                     mlp_biases=mlp_biases)
 
-            encoder_parameters = EncoderParams( \
-                    attention_weights = attention_weights, \
-                    mlp_params = mlp_params)
+            if self.number_heads == 1:
+                encoder_parameters = EncoderLayerParams( \
+                        attention_weights = attention_weights, \
+                        mlp_params = mlp_params)
+            else:
+                linear_weights = glorot(3, self.number_heads,\
+                        self.token_dim, self.token_dim)
+                reshape_weights = glorot(self.token_dim * self.number_heads, \
+                        self.token_dim)
+                encoder_parameters = MHEncoderLayerParams( \
+                        attention_weights = attention_weights, \
+                        mlp_params = mlp_params,\
+                        linear_weights = linear_weights,\
+                        reshape_weights = reshape_weights)
 
             encoder_stack.append(encoder_parameters)
         encoder_stack = EncoderStack(*encoder_stack)
@@ -243,13 +260,32 @@ class Transformer():
                     self_weights=self_attention_weights,\
                     encoded_weights=encoded_weights)
 
-            decoder_parameters = DecoderParams( \
-                encoded_attention = attention_weights, \
-                mlp_params = mlp_params)
+            if self.number_heads == 1:
+                decoder_parameters = DecoderLayerParams( \
+                    encoded_attention = attention_weights, \
+                    mlp_params = mlp_params)
+            else:
+                linear_weights = glorot(2, 3, self.number_heads,\
+                        self.token_dim, self.token_dim)
+                reshape_weights = glorot(2, self.token_dim * self.number_heads, \
+                        self.token_dim)
+                decoder_parameters = MHDecoderLayerParams( \
+                    encoded_attention = attention_weights, \
+                    mlp_params = mlp_params,\
+                    linear_weights = linear_weights,\
+                    reshape_weights = reshape_weights)
 
             decoder_stack.append(decoder_parameters)
 
         decoder_stack = DecoderStack(*decoder_stack)
+
+        if self.number_heads == 1:
+            self.encoder_layer = encoder_layer
+            self.decoder_layer = decoder_layer
+        else:
+            self.encoder_layer = multihead_encoder_layer
+            self.decoder_layer = multihead_decoder_layer
+
 
         self.parameters = TransformerParams(token_parameters, \
                 encoder_stack, \
@@ -268,18 +304,18 @@ class Transformer():
         encoder_stack = parameters[1]
         decoder_stack = parameters[2]
         
-
         # encoder stack: list of encoder parameters
         encoded = x 
         for encoder_params in encoder_stack:
 
-            encoded = encoder_layer(encoded, encoder_params)
+            encoded = self.encoder_layer(encoded, encoder_params)
+
 
         # decoder stack: list of encoder parameters
         decoded = 1.0 * encoded
         for decoder_params in decoder_stack:
 
-            decoded = decoder_layer(decoded, encoded, decoder_params)
+            decoded = self.decoder_layer(decoded, encoded, decoder_params)
 
         return decoded
     
@@ -436,15 +472,10 @@ class Transformer():
         np_parameters = jnp.load(filepath)
         self.restore_parameters(np_parameters)
 
-
-
-                
-
-
 if __name__ == "__main__":
     # ad-hoc test for training transformer
 
-    model = Transformer(lr=1e-2)
+    model = Transformer(lr=1e-3)
 
     ha_tag = "YPYDVPDYA".lower()
 

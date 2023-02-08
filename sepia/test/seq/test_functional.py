@@ -12,8 +12,8 @@ from sepia.seq.functional import \
         SelfAttentionWB, \
         SelfAttentionW, \
         EncodedAttentionW,\
-        EncoderParams, \
-        DecoderParams, \
+        EncoderLayerParams, \
+        DecoderLayerParams, \
         MLPParams, \
         self_attention, \
         encoder_layer, \
@@ -95,7 +95,7 @@ class TestDecoder(unittest.TestCase):
         mlp_params = MLPParams(mlp_weights=mlp_weights,\
                 mlp_biases=mlp_biases)
 
-        self.decoder_parameters = DecoderParams( \
+        self.decoder_parameters = DecoderLayerParams( \
                 encoded_attention = attention_weights, \
                 mlp_params = mlp_params)
                 
@@ -124,7 +124,7 @@ class TestEncoder(unittest.TestCase):
         mlp_params = MLPParams(mlp_weights=mlp_weights,\
                 mlp_biases=mlp_biases)
 
-        self.parameters = EncoderParams( \
+        self.parameters = EncoderLayerParams( \
                 attention_weights = attention_weights, \
                 mlp_params = mlp_params)
 
