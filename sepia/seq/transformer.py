@@ -458,7 +458,7 @@ class Transformer():
                 print(f"loss at epoch {epoch}:  {cumulative_loss / (batch_index+1.):.3e}")
 
             if (epoch % save_every == 0 or epoch == max_epochs-1) and save_count:
-                checkpoint_path = os.path.join("parameters", f"i{tag}_epoch{epoch}.npy") 
+                checkpoint_path = os.path.join("parameters", f"{tag}_epoch{epoch}.npy") 
                 print(f"saving checkpoint at epoch {epoch} to {checkpoint_path}")
                 jnp.save(checkpoint_path, get_parameters(self.parameters))
     
